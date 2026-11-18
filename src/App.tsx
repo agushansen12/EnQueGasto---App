@@ -68,7 +68,7 @@ function App() {
   function changeMonth(delta: number) { const d = new Date(month + '-15T12:00:00'); d.setMonth(d.getMonth() + delta); setMonth(monthKey(d.toISOString())) }
   function exportCsv() {
     const rows = [['Fecha', 'Tipo', 'Concepto', 'Categoría', 'Persona', 'Monto', 'Comentario'], ...movements.map(m => [m.date, m.kind === 'income' ? 'Ingreso' : 'Gasto', m.concept, m.category, m.person, String(m.amount), m.comment ?? ''])]
-    const csv = rows.map(row => row.map(v => '"' + v.replaceAll('"', '""') + '"').join(';')).join('\n')
+    const csv = rows.map(row => row.map(v => '"' + v.replace(/"/g, '""') + '"').join(';')).join('\n')
     const url = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' }))
     const a = document.createElement('a'); a.href = url; a.download = 'enquegasto-movimientos.csv'; a.click(); URL.revokeObjectURL(url)
   }
