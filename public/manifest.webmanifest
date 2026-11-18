@@ -1,0 +1,19 @@
+{
+  "id": "/EnQueGasto---App/",
+  "name": "EnQuéGasto",
+  "short_name": "EnQuéGasto",
+  "description": "Control simple de ingresos y gastos compartidos.",
+  "start_url": "/EnQueGasto---App/",
+  "scope": "/EnQueGasto---App/",
+  "display": "standalone",
+  "background_color": "#f7f8f5",
+  "theme_color": "#173f35",
+  "icons": [
+    {
+      "src": "/EnQueGasto---App/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
