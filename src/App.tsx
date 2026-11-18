@@ -176,6 +176,7 @@ function MovementModal({ categories, editing, onClose, onSave }: { categories: C
 
 // Se conserva el panel anterior mientras se conecta su persistencia compartida.
 void FinanceApp
+void HouseholdReady
 
 type Household = { id: string; name: string }
 
