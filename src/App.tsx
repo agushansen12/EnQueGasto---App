@@ -261,11 +261,32 @@ function HouseholdSetup({ onCreate, onSignOut, error }: { onCreate: (name: strin
 }
 
 function HouseholdReady({ household, onSignOut }: { household: Household; onSignOut: () => void }) {
+  const [email, setEmail] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [message, setMessage] = useState('Hogar configurado correctamente.')
+
+  async function invite(event: FormEvent) {
+    event.preventDefault()
+    if (!supabase || !email.trim()) return
+    setBusy(true); setError(''); setMessage('')
+    const { data, error: inviteError } = await supabase.rpc('add_household_member', { member_email: email.trim() })
+    setBusy(false)
+    if (inviteError) { setError(inviteError.message); return }
+    setMessage(typeof data === 'string' ? data : 'Integrante agregado correctamente.')
+    setEmail('')
+  }
+
   return <div className="auth-screen"><div className="auth-card">
     <div className="auth-brand"><div className="brand-mark"><Wallet size={21} /></div><div><strong>EnQuéGasto</strong><span>Finanzas compartidas</span></div></div>
     <div className="eyebrow">HOGAR CREADO</div><h1>{household.name}</h1>
-    <p>Tu espacio compartido ya está creado. El siguiente paso será invitar a Camila y conectar los movimientos con la base de datos.</p>
-    <div className="auth-message">Hogar configurado correctamente.</div>
+    <p>Tu espacio compartido ya está creado. Cuando Camila se registre, ingresá el mismo correo que usó para crear su cuenta.</p>
+    <form onSubmit={invite}>
+      <label className="field-label">Correo de Camila<input type="email" autoComplete="email" placeholder="camila@email.com" value={email} onChange={e => setEmail(e.target.value)} required /></label>
+      {error && <div className="auth-error">{error}</div>}
+      {message && <div className="auth-message">{message}</div>}
+      <button className="primary-button auth-submit" type="submit" disabled={busy}>{busy ? 'Vinculando cuenta...' : 'Vincular a mi hogar'}</button>
+    </form>
     <button className="auth-toggle" type="button" onClick={onSignOut}>Cerrar sesión</button>
   </div></div>
 }
