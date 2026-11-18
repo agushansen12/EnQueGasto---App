@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Activity, ArrowDownLeft, ArrowLeft, ArrowRight, ArrowUpRight, CalendarDays, ChartNoAxesCombined, Check, ChevronDown, CircleHelp, CreditCard, Download, LayoutDashboard, ListFilter, Plus, Search, Settings, SlidersHorizontal, Trash2, Wallet, X } from 'lucide-react'
+import type { FormEvent } from 'react'
+import { Activity, ArrowDownLeft, ArrowLeft, ArrowRight, ArrowUpRight, CalendarDays, ChartNoAxesCombined, Check, ChevronDown, CircleHelp, Download, LayoutDashboard, ListFilter, Plus, Search, Settings, SlidersHorizontal, Trash2, Wallet, X } from 'lucide-react'
 
 type Kind = 'expense' | 'income'
 type Person = 'Agus' | 'Camila' | 'Compartido'
@@ -135,7 +136,7 @@ function MovementModal({ categories, editing, onClose, onSave }: { categories: C
   const [comment, setComment] = useState(editing?.comment ?? '')
   const availableCategories = categories.filter(c => c.kind === kind)
   useEffect(() => { if (!availableCategories.some(c => c.name === category)) setCategory(availableCategories[0]?.name ?? '') }, [kind, categories])
-  function submit(e: React.FormEvent) { e.preventDefault(); const value = Number(amount.replace(',', '.')); if (!concept.trim() || !Number.isFinite(value) || value <= 0 || !category) return; onSave({ id: editing?.id ?? crypto.randomUUID(), date, kind, concept: concept.trim(), category, person, amount: value, comment: comment.trim() || undefined, recordedBy: 'Agus' }) }
+  function submit(e: FormEvent) { e.preventDefault(); const value = Number(amount.replace(',', '.')); if (!concept.trim() || !Number.isFinite(value) || value <= 0 || !category) return; onSave({ id: editing?.id ?? crypto.randomUUID(), date, kind, concept: concept.trim(), category, person, amount: value, comment: comment.trim() || undefined, recordedBy: 'Agus' }) }
   return <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}><form className="modal" onSubmit={submit}><div className="modal-header"><div><div className="eyebrow">{editing ? 'ACTUALIZAR REGISTRO' : 'NUEVO REGISTRO'}</div><h2>{editing ? 'Editar movimiento' : 'Agregar movimiento'}</h2></div><button type="button" className="icon-button" onClick={onClose}><X size={19} /></button></div>
     <div className="kind-switch"><button type="button" className={kind === 'expense' ? 'selected expense-selected' : ''} onClick={() => setKind('expense')}><ArrowUpRight size={16} /> Gasto</button><button type="button" className={kind === 'income' ? 'selected income-selected' : ''} onClick={() => setKind('income')}><ArrowDownLeft size={16} /> Ingreso</button></div>
     <label className="field-label">Concepto<input autoFocus placeholder="Ej. Compra del supermercado" value={concept} onChange={e => setConcept(e.target.value)} required /></label>
