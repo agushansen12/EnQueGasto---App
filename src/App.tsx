@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
+import type { Session } from '@supabase/supabase-js'
+import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { Activity, ArrowDownLeft, ArrowLeft, ArrowRight, ArrowUpRight, CalendarDays, ChartNoAxesCombined, Check, ChevronDown, CircleHelp, Download, LayoutDashboard, ListFilter, Plus, Search, Settings, SlidersHorizontal, Trash2, Wallet, X } from 'lucide-react'
 
 type Kind = 'expense' | 'income'
@@ -33,7 +35,7 @@ const nav = [
 ] as const
 type Page = typeof nav[number]['id']
 
-function App() {
+function FinanceApp({ onSignOut }: { onSignOut: () => void }) {
   const [page, setPage] = useState<Page>('home')
   const [movements, setMovements] = useState<Movement[]>(() => {
     try { const saved = localStorage.getItem('enquegasto-movements'); return saved ? JSON.parse(saved) as Movement[] : seed } catch { return seed }
@@ -82,7 +84,7 @@ function App() {
       <div className="sidebar-bottom"><div className="couple-avatar"><span>A</span><span>C</span></div><div className="couple-copy"><strong>Agus y Camila</strong><span>Hogar compartido</span></div><ChevronDown size={15} className="muted-icon" /></div>
     </aside>
     <main className="main-area">
-      <header className="topbar"><div className="breadcrumb">Finanzas <span>/</span> <strong>{nav.find(n => n.id === page)?.label}</strong></div><div className="top-actions"><span className="local-pill"><span className="status-dot" /> Datos en este dispositivo</span><button className="icon-button" title="Ayuda"><CircleHelp size={18} /></button><div className="user-avatar">A</div></div></header>
+      <header className="topbar"><div className="breadcrumb">Finanzas <span>/</span> <strong>{nav.find(n => n.id === page)?.label}</strong></div><div className="top-actions"><span className="local-pill"><span className="status-dot" /> Datos en este dispositivo</span><button className="icon-button" title="Ayuda"><CircleHelp size={18} /></button><button className="user-avatar signout-avatar" title="Cerrar sesión" onClick={onSignOut}>A</button></div></header>
       <div className="page-content">
         {page === 'home' && <><div className="page-heading"><div><div className="eyebrow">TU ECONOMÍA, EN CLARO</div><h1>Resumen</h1><p>Así se mueve la economía de tu hogar.</p></div><button className="primary-button" onClick={() => { setEditing(null); setModal(true) }}><Plus size={17} /> Nuevo movimiento</button></div>
           <div className="month-control"><button className="icon-button" onClick={() => changeMonth(-1)}><ArrowLeft size={17} /></button><CalendarDays size={16} /><span>{monthName}</span><button className="icon-button" onClick={() => changeMonth(1)}><ArrowRight size={17} /></button><button className="text-button" onClick={() => setMonth(monthKey(today))}>Este mes</button></div>
@@ -145,6 +147,63 @@ function MovementModal({ categories, editing, onClose, onSave }: { categories: C
     <label className="field-label">Comentario <span className="optional">(opcional)</span><textarea rows={2} placeholder="Un detalle para recordar..." value={comment} onChange={e => setComment(e.target.value)} /></label>
     <div className="modal-footer"><button type="button" className="secondary-button" onClick={onClose}>Cancelar</button><button className="primary-button" type="submit"><Check size={16} /> {editing ? 'Guardar cambios' : 'Guardar movimiento'}</button></div>
     </form></div>
+}
+
+
+function App() {
+  const [session, setSession] = useState<Session | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [mode, setMode] = useState<'login' | 'signup'>('login')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [authError, setAuthError] = useState('')
+  const [message, setMessage] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (!supabase) { setLoading(false); return }
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (error) setAuthError(error.message)
+      setSession(data.session)
+      setLoading(false)
+    })
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession))
+    return () => subscription.unsubscribe()
+  }, [])
+
+  async function submitAuth(event: FormEvent) {
+    event.preventDefault()
+    if (!supabase) return
+    setBusy(true); setAuthError(''); setMessage('')
+    const result = mode === 'signup'
+      ? await supabase.auth.signUp({ email: email.trim(), password })
+      : await supabase.auth.signInWithPassword({ email: email.trim(), password })
+    setBusy(false)
+    if (result.error) { setAuthError(result.error.message); return }
+    if (mode === 'signup' && !result.data.session) setMessage('Te enviamos un correo para confirmar tu cuenta. Después vas a poder iniciar sesión.')
+  }
+
+  async function signOut() {
+    if (!supabase) return
+    await supabase.auth.signOut()
+    setSession(null)
+  }
+
+  if (loading) return <div className="auth-screen"><div className="auth-card"><div className="brand-mark"><Wallet size={21} /></div><p>Conectando con tu espacio...</p></div></div>
+  if (!isSupabaseConfigured || !supabase) return <div className="auth-screen"><div className="auth-card"><div className="brand-mark"><Wallet size={21} /></div><h1>EnQuéGasto</h1><p>La conexión con Supabase todavía no está configurada. Revisá las variables de GitHub Actions y volvé a publicar.</p></div></div>
+  if (!session) return <div className="auth-screen"><form className="auth-card" onSubmit={submitAuth}>
+    <div className="auth-brand"><div className="brand-mark"><Wallet size={21} /></div><div><strong>EnQuéGasto</strong><span>Finanzas compartidas</span></div></div>
+    <div className="eyebrow">{mode === 'login' ? 'TU ESPACIO, EN ORDEN' : 'EMPEZÁ A ORGANIZARTE'}</div>
+    <h1>{mode === 'login' ? 'Bienvenido de nuevo' : 'Crear cuenta'}</h1>
+    <p>{mode === 'login' ? 'Ingresá para acceder a tus finanzas.' : 'Registrate con tu correo para empezar.'}</p>
+    <label className="field-label">Correo electrónico<input type="email" autoComplete="email" placeholder="tu@email.com" value={email} onChange={e => setEmail(e.target.value)} required /></label>
+    <label className="field-label">Contraseña<input type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} placeholder="Al menos 6 caracteres" minLength={6} value={password} onChange={e => setPassword(e.target.value)} required /></label>
+    {authError && <div className="auth-error">{authError}</div>}
+    {message && <div className="auth-message">{message}</div>}
+    <button className="primary-button auth-submit" type="submit" disabled={busy}>{busy ? 'Un momento...' : mode === 'login' ? 'Iniciar sesión' : 'Crear cuenta'}</button>
+    <button className="auth-toggle" type="button" onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setAuthError(''); setMessage('') }}>{mode === 'login' ? '¿No tenés cuenta? Crear una' : '¿Ya tenés cuenta? Iniciar sesión'}</button>
+  </form></div>
+  return <FinanceApp onSignOut={signOut} />
 }
 
 export default App
