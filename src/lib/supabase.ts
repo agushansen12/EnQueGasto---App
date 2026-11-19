@@ -9,5 +9,7 @@ export const isSupabaseConfigured = Boolean(
 
 // Keeps the current app usable locally until .env.local is configured.
 export const supabase = isSupabaseConfigured
-  ? createClient(supabaseUrl, supabasePublishableKey)
+  ? createClient(supabaseUrl, supabasePublishableKey, {
+      auth: { experimental: { passkey: true } },
+    })
   : null;
