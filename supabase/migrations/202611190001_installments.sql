@@ -99,31 +99,13 @@ with check (public.is_household_member(household_id));
 drop policy if exists "Members can update installments" on public.installments;
 create policy "Members can update installments"
 on public.installments for update to authenticated
-using (
-  exists (
-    select 1 from public.installment_plans p
-    where p.id = installments.plan_id
-      and public.is_household_member(p.household_id)
-  )
-)
-with check (
-  exists (
-    select 1 from public.installment_plans p
-    where p.id = installments.plan_id
-      and public.is_household_member(p.household_id)
-  )
-);
+using (public.is_household_member(household_id))
+with check (public.is_household_member(household_id));
 
 drop policy if exists "Members can delete installments" on public.installments;
 create policy "Members can delete installments"
 on public.installments for delete to authenticated
-using (
-  exists (
-    select 1 from public.installment_plans p
-    where p.id = installments.plan_id
-      and public.is_household_member(p.household_id)
-  )
-);
+using (public.is_household_member(household_id));
 
 grant select, insert, update, delete on public.installment_plans to authenticated;
 grant select, insert, update, delete on public.installments to authenticated;
