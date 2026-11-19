@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { FormEvent } from 'react'
 import { Bot, CheckCircle2, CornerDownLeft, LoaderCircle, MessageCircle, Sparkles, UserRound } from 'lucide-react'
 
 type Kind = 'expense' | 'income'
@@ -20,7 +21,7 @@ function parseAmount(text: string): number | null {
   else if (raw.includes(',')) value = Number(raw.replace(',', '.'))
   else if (raw.includes('.')) {
     const parts = raw.split('.')
-    value = parts.at(-1)?.length === 3 ? Number(parts.join('')) : Number(raw)
+    value = parts[parts.length - 1]?.length === 3 ? Number(parts.join('')) : Number(raw)
   } else value = Number(raw)
   if (suffix.startsWith('mil') || suffix === 'k') value *= 1000
   if (suffix.startsWith('millon') || suffix === 'm') value *= 1000000
@@ -76,7 +77,7 @@ export default function AssistantPanel({ categories, onSave }: { categories: Cat
     localStorage.setItem('enquegasto-assistant-person', value)
   }
 
-  async function send(event: React.FormEvent) {
+  async function send(event: FormEvent) {
     event.preventDefault()
     const text = input.trim()
     if (!text || busy) return
