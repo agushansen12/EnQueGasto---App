@@ -413,6 +413,51 @@ values
   (NULL, 'devolucion de compra', 'devolucion de compra', 'income', 'Otros ingresos', 'Devolucion De Compra', 'phrase', 70, true)
 on conflict do nothing;
 
+-- Conceptos adicionales de la categoría Otros gastos.
+insert into public.assistant_knowledge
+  (household_id, phrase, normalized_phrase, movement_type, category_name, canonical_concept, match_type, priority, is_active)
+values
+  (NULL, 'otros gastos', 'otros gastos', 'expense', 'Otros gastos', 'Otros Gastos', 'phrase', 70, true),
+  (NULL, 'varios', 'varios', 'expense', 'Otros gastos', 'Varios', 'phrase', 70, true),
+  (NULL, 'imprevisto', 'imprevisto', 'expense', 'Otros gastos', 'Imprevisto', 'phrase', 70, true),
+  (NULL, 'compra general', 'compra general', 'expense', 'Otros gastos', 'Compra General', 'phrase', 70, true),
+  (NULL, 'articulos varios', 'articulos varios', 'expense', 'Otros gastos', 'Articulos Varios', 'phrase', 70, true),
+  (NULL, 'regalo', 'regalo', 'expense', 'Otros gastos', 'Regalo', 'phrase', 70, true),
+  (NULL, 'regalos', 'regalos', 'expense', 'Otros gastos', 'Regalos', 'phrase', 70, true),
+  (NULL, 'juguete', 'juguete', 'expense', 'Otros gastos', 'Juguete', 'phrase', 70, true),
+  (NULL, 'juguetes', 'juguetes', 'expense', 'Otros gastos', 'Juguetes', 'phrase', 70, true),
+  (NULL, 'libro', 'libro', 'expense', 'Otros gastos', 'Libro', 'phrase', 70, true),
+  (NULL, 'libros', 'libros', 'expense', 'Otros gastos', 'Libros', 'phrase', 70, true),
+  (NULL, 'papeleria', 'papeleria', 'expense', 'Otros gastos', 'Papeleria', 'phrase', 70, true),
+  (NULL, 'libreria', 'libreria', 'expense', 'Otros gastos', 'Libreria', 'phrase', 70, true),
+  (NULL, 'curso', 'curso', 'expense', 'Otros gastos', 'Curso', 'phrase', 70, true),
+  (NULL, 'educacion', 'educacion', 'expense', 'Otros gastos', 'Educacion', 'phrase', 70, true),
+  (NULL, 'colegio', 'colegio', 'expense', 'Otros gastos', 'Colegio', 'phrase', 70, true),
+  (NULL, 'universidad', 'universidad', 'expense', 'Otros gastos', 'Universidad', 'phrase', 70, true),
+  (NULL, 'entrada cine', 'entrada cine', 'expense', 'Otros gastos', 'Entrada Cine', 'phrase', 70, true),
+  (NULL, 'cine', 'cine', 'expense', 'Otros gastos', 'Cine', 'phrase', 70, true),
+  (NULL, 'teatro', 'teatro', 'expense', 'Otros gastos', 'Teatro', 'phrase', 70, true),
+  (NULL, 'concierto', 'concierto', 'expense', 'Otros gastos', 'Concierto', 'phrase', 70, true),
+  (NULL, 'entrada recital', 'entrada recital', 'expense', 'Otros gastos', 'Entrada Recital', 'phrase', 70, true),
+  (NULL, 'juegos', 'juegos', 'expense', 'Otros gastos', 'Juegos', 'phrase', 70, true),
+  (NULL, 'juego de mesa', 'juego de mesa', 'expense', 'Otros gastos', 'Juego De Mesa', 'phrase', 70, true),
+  (NULL, 'mascota', 'mascota', 'expense', 'Otros gastos', 'Mascota', 'phrase', 70, true),
+  (NULL, 'veterinaria', 'veterinaria', 'expense', 'Otros gastos', 'Veterinaria', 'phrase', 70, true),
+  (NULL, 'alimento para mascotas', 'alimento para mascotas', 'expense', 'Otros gastos', 'Alimento Para Mascotas', 'phrase', 70, true),
+  (NULL, 'peluqueria', 'peluqueria', 'expense', 'Otros gastos', 'Peluqueria', 'phrase', 70, true),
+  (NULL, 'barberia', 'barberia', 'expense', 'Otros gastos', 'Barberia', 'phrase', 70, true),
+  (NULL, 'lavanderia', 'lavanderia', 'expense', 'Otros gastos', 'Lavanderia', 'phrase', 70, true),
+  (NULL, 'tintoreria', 'tintoreria', 'expense', 'Otros gastos', 'Tintoreria', 'phrase', 70, true),
+  (NULL, 'tramite', 'tramite', 'expense', 'Otros gastos', 'Tramite', 'phrase', 70, true),
+  (NULL, 'documentacion', 'documentacion', 'expense', 'Otros gastos', 'Documentacion', 'phrase', 70, true),
+  (NULL, 'comision bancaria', 'comision bancaria', 'expense', 'Otros gastos', 'Comision Bancaria', 'phrase', 70, true),
+  (NULL, 'mantenimiento', 'mantenimiento', 'expense', 'Otros gastos', 'Mantenimiento', 'phrase', 70, true),
+  (NULL, 'repuesto', 'repuesto', 'expense', 'Otros gastos', 'Repuesto', 'phrase', 70, true),
+  (NULL, 'accesorio', 'accesorio', 'expense', 'Otros gastos', 'Accesorio', 'phrase', 70, true),
+  (NULL, 'accesorios', 'accesorios', 'expense', 'Otros gastos', 'Accesorios', 'phrase', 70, true),
+  (NULL, 'regalo de cumpleaños', 'regalo de cumpleanos', 'expense', 'Otros gastos', 'Regalo De Cumpleaños', 'phrase', 70, true)
+on conflict do nothing;
+
 -- Resumen de control: cantidad de expresiones cargadas por categoría y tipo.
 select movement_type, category_name, count(*) as expressions
 from public.assistant_knowledge
