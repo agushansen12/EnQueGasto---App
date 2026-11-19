@@ -74,7 +74,7 @@ function parseMovement(text: string, categories: Category[], identity: Person): 
     { category: 'Transporte', words: ['recarga sube', 'carga sube', 'sube', 'nafta', 'combustible', 'peaje', 'estacionamiento', 'uber', 'cabify', 'taxi', 'colectivo', 'tren', 'subte', 'bondi'], concept: 'Transporte' },
     { category: 'Servicios', words: ['electricidad', 'edenor', 'edesur', 'internet', 'wifi', 'agua', 'gas', 'telefono', 'celular', 'factura de luz', 'servicio de'], concept: 'Servicios' },
     { category: 'Salud', words: ['farmacia', 'medicamento', 'remedio', 'consulta', 'medico', 'medica', 'dentista'], concept: 'Salud' },
-    { category: 'Gastronomía', words: ['restaurant', 'restaurante', 'cafe', 'bar', 'delivery', 'pizza', 'hamburguesa'], concept: 'Gastronomía' },
+    { category: 'Gastronomía', words: ['restaurant', 'restaurante', 'cafe', 'bar', 'delivery', 'pizza', 'hamburguesa', 'helado', 'heladeria', 'postre', 'empanada', 'sushi', 'sandwich', 'milanesa', 'pastas', 'asado', 'parrilla', 'panaderia', 'facturas'], concept: 'Gastronomía' },
     { category: 'Indumentaria', words: ['ropa', 'remera', 'zapatilla', 'pantalon', 'camisa', 'buzo', 'jean', 'vestido'], concept: 'Indumentaria' },
     { category: 'Hogar', words: ['mueble', 'muebles', 'mesa', 'silla', 'cama', 'escritorio', 'placard', 'estanteria', 'lampara', 'decoracion', 'ferreteria', 'heladera', 'sillon', 'colchon', 'cortina', 'bazar', 'utensilios'], concept: 'Hogar' },
     { category: 'Sueldo', words: ['sueldo', 'salario', 'cobro del trabajo'], concept: 'Sueldo' },
@@ -114,8 +114,9 @@ function parseMovement(text: string, categories: Category[], identity: Person): 
   else if (clean.includes('camila')) person = 'Camila'
   else if (clean.includes('agus')) person = 'Agus'
 
-  const concept = match.category === 'Indumentaria'
-    ? (match.words.find(word => hasTerm(clean, word)) ?? 'Indumentaria')
+  const matchedWord = match.words.find(word => hasTerm(clean, word))
+  const concept = ['Indumentaria', 'Gastronomía'].includes(match.category)
+    ? (matchedWord ?? match.concept)
     : match.concept
   const displayConcept = concept.charAt(0).toLocaleUpperCase('es-AR') + concept.slice(1)
   return { status: 'ready', draft: { date: today(), kind, concept: displayConcept, category: match.category, person, amount } }
