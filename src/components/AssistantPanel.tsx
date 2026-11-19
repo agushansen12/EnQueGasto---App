@@ -5,11 +5,11 @@ import { Bot, CheckCircle2, CornerDownLeft, LoaderCircle, MessageCircle, Sparkle
 type Kind = 'expense' | 'income'
 type Person = 'Agus' | 'Camila' | 'Compartido'
 type Category = { id: string; name: string; kind: Kind }
-type KnowledgeEntry = { phrase: string; normalized_phrase: string; movement_type: Kind; category_name: string; canonical_concept: string; match_type: 'phrase' | 'merchant'; priority: number }
+type KnowledgeEntry = { household_id?: string | null; phrase: string; normalized_phrase: string; movement_type: Kind; category_name: string; canonical_concept: string; match_type: 'phrase' | 'merchant'; priority: number }
 type Draft = { date: string; kind: Kind; concept: string; category: string; person: Person; amount: number; comment?: string }
 type PendingDraft = Omit<Draft, 'category'>
 type CategoryChoice = { label: string; category: string }
-type Message = { role: 'user' | 'assistant'; text: string; draft?: Draft; pendingDraft?: PendingDraft; choices?: CategoryChoice[] }
+type Message = { role: 'user' | 'assistant'; text: string; draft?: Draft; pendingDraft?: PendingDraft; choices?: CategoryChoice[]; movementId?: string; sourceText?: string; correcting?: boolean }
 type ParseResult =
   | { status: 'ready'; draft: Draft }
   | { status: 'clarify'; text: string; pendingDraft: PendingDraft; choices: CategoryChoice[] }
@@ -141,7 +141,7 @@ function parseMovement(text: string, categories: Category[], knowledge: Knowledg
   return { status: 'ready', draft: { date: today(), kind, concept: displayConcept, category: match.category, person, amount } }
 }
 
-export default function AssistantPanel({ categories, knowledge, onSave }: { categories: Category[]; knowledge: KnowledgeEntry[]; onSave: (draft: Draft) => Promise<boolean> }) {
+export default function AssistantPanel({ categories, knowledge, onSave, onCorrect }: { categories: Category[]; knowledge: KnowledgeEntry[]; onSave: (draft: Draft) => Promise<string | null>; onCorrect: (movementId: string, draft: Draft, category: string, phrase: string) => Promise<boolean> }) {
   const [identity, setIdentity] = useState<Person>(() => (localStorage.getItem('enquegasto-assistant-person') as Person | null) ?? 'Agus')
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
@@ -154,16 +154,19 @@ export default function AssistantPanel({ categories, knowledge, onSave }: { cate
     localStorage.setItem('enquegasto-assistant-person', value)
   }
 
-  async function saveDraft(draft: Draft) {
+  async function saveDraft(draft: Draft, sourceText?: string) {
     setBusy(true)
-    const saved = await onSave(draft)
+    const movementId = await onSave(draft)
+    const saved = Boolean(movementId)
     setBusy(false)
     setMessages(current => [...current, {
       role: 'assistant',
       text: saved
         ? 'Listo, registré el movimiento. Si necesitás corregirlo, podés editarlo desde Movimientos.'
         : 'No pude guardar el movimiento. Revisá la conexión e intentá nuevamente.',
-      draft: saved ? draft : undefined
+      draft: saved ? draft : undefined,
+      movementId: saved ? movementId ?? undefined : undefined,
+      sourceText: saved ? sourceText : undefined
     }])
   }
 
@@ -175,6 +178,24 @@ export default function AssistantPanel({ categories, knowledge, onSave }: { cate
       { role: 'user', text: choice.label }
     ])
     await saveDraft(draft)
+  }
+
+  function learningPhrase(sourceText: string) {
+    const clean = normalize(sourceText)
+      .replace(/\$?\s*\d[\d.,]*\s*(millones?|millon|mil|k|m|lucas?|gambas?|palos?)?/g, ' ')
+      .replace(/\b(un|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|quince|veinte|treinta|cuarenta|cincuenta|cien|gaste|gast[eé]|pague|pagu[eé]|compre|compr[eé]|compre|abone|abon[eé]|hoy|ayer|me|en|de|del|la|el|un|una|por|para|con|a|mi|mis|que|fue|compra|compras)\b/g, ' ')
+      .replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim()
+    return clean.split(' ').filter(word => word.length > 2).slice(-3).join(' ')
+  }
+
+  async function correctAndLearn(messageIndex: number, message: Message, category: string) {
+    if (busy || !message.movementId || !message.draft || !message.sourceText) return
+    const phrase = learningPhrase(message.sourceText)
+    if (!phrase) return
+    setBusy(true)
+    const saved = await onCorrect(message.movementId, message.draft, category, phrase)
+    setBusy(false)
+    if (saved) setMessages(current => current.map((item, index) => index === messageIndex ? { ...item, draft: { ...item.draft!, category }, correcting: false, text: `Corregí la categoría a ${category} y aprendí la expresión “${phrase}”. La próxima vez la voy a reconocer para todo el hogar.` } : item))
   }
 
   async function send(event: FormEvent) {
@@ -197,7 +218,7 @@ export default function AssistantPanel({ categories, knowledge, onSave }: { cate
       }])
       return
     }
-    await saveDraft(result.draft)
+    await saveDraft(result.draft, text)
   }
 
   return <section className="assistant-page">
@@ -210,7 +231,7 @@ export default function AssistantPanel({ categories, knowledge, onSave }: { cate
             <div className="assistant-message-icon">{message.role === 'assistant' ? <Bot size={15}/> : <UserRound size={15}/>}</div>
             <div className="assistant-bubble"><p>{message.text}</p>
               {message.choices && message.pendingDraft && <div className="assistant-choices">{message.choices.map(choice => <button type="button" key={choice.category} disabled={busy} onClick={() => chooseCategory(choice, message.pendingDraft!)}>{choice.label}</button>)}</div>}
-              {message.draft && <div className="assistant-receipt"><div><span>Concepto</span><strong>{message.draft.concept}</strong></div><div><span>Categoría</span><strong>{message.draft.category}</strong></div><div><span>Persona</span><strong>{message.draft.person}</strong></div><div><span>Importe</span><strong>{new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(message.draft.amount)}</strong></div><div className="assistant-saved"><CheckCircle2 size={14}/> Registrado</div></div>}
+              {message.draft && <div className="assistant-receipt"><div><span>Concepto</span><strong>{message.draft.concept}</strong></div><div><span>Categoría</span><strong>{message.draft.category}</strong></div><div><span>Persona</span><strong>{message.draft.person}</strong></div><div><span>Importe</span><strong>{new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(message.draft.amount)}</strong></div><div className="assistant-saved"><CheckCircle2 size={14}/> Registrado</div>{message.movementId && message.sourceText && <div className="assistant-learning">{!message.correcting ? <button type="button" disabled={busy} onClick={() => setMessages(current => current.map((item, i) => i === index ? { ...item, correcting: true } : item))}>¿Categoría incorrecta? Corregir y enseñar</button> : <div><small>Elegí la categoría correcta para corregir este movimiento y enseñarle al asistente:</small><div className="assistant-choices">{categories.filter(category => category.kind === message.draft!.kind).map(category => <button type="button" key={category.id} disabled={busy} className={category.name === message.draft!.category ? 'selected' : ''} onClick={() => correctAndLearn(index, message, category.name)}>{category.name}</button>)}</div><button type="button" onClick={() => setMessages(current => current.map((item, i) => i === index ? { ...item, correcting: false } : item))}>Cancelar</button></div>}</div>}</div>}
             </div>
           </div>)}
           {busy && <div className="assistant-typing"><LoaderCircle size={15}/> Registrando movimiento...</div>}
