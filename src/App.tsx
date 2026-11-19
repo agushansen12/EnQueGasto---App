@@ -183,9 +183,11 @@ function FinanceApp({ household, userId, onSignOut }: { household: Household; us
   }
   async function removeMovement(id: string) {
     if (!supabase) return
-    const { error } = await supabase.from('movements').delete().eq('id', id).eq('household_id', household.id)
+    const { error } = await supabase.rpc('delete_movement', { p_movement_id: id })
     if (error) { notify('Error al eliminar: ' + error.message); return }
-    setMovements(current => current.filter(m => m.id !== id)); notify('Movimiento eliminado')
+    // La función también puede eliminar un plan completo y todas sus cuotas.
+    // Recargar evita dejar datos relacionados visibles en el estado local.
+    window.location.reload()
   }
   function changeMonth(delta: number) { const d = new Date(month + '-15T12:00:00'); d.setMonth(d.getMonth() + delta); setMonth(monthKey(d.toISOString())) }
   function exportCsv() {
