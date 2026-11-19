@@ -42,6 +42,8 @@ function FinanceApp({ household, userId, onSignOut }: { household: Household; us
   const [month, setMonth] = useState(monthKey(today))
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState<Movement | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Movement | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const [filter, setFilter] = useState('Todos')
   const [analyticsPerson, setAnalyticsPerson] = useState('Todos')
   const [search, setSearch] = useState('')
@@ -200,15 +202,10 @@ function FinanceApp({ household, userId, onSignOut }: { household: Household; us
     notify(next === 'paid' ? 'Cuota marcada como pagada' : 'Cuota marcada como pendiente')
   }
   async function removeMovement(id: string) {
-    if (!supabase) return
-    const movement = movements.find(item => item.id === id)
-    const concept = movement?.concept ?? 'este movimiento'
-    const amount = movement ? money(movement.amount) : ''
-    const confirmed = window.confirm(
-      `¿Eliminar "${concept}"${amount ? ` (${amount})` : ''}?\n\nEsta acción no se puede deshacer. Si pertenece a una compra en cuotas, se eliminará la compra financiada completa y todas sus cuotas.\n\n¿Querés continuar?`
-    )
-    if (!confirmed) return
+    if (!supabase || deleting) return
+    setDeleting(true)
     const { error } = await supabase.rpc('delete_movement', { p_movement_id: id })
+    setDeleting(false)
     if (error) { notify('Error al eliminar: ' + error.message); return }
     // Mantener al usuario en Movimientos y actualizar el estado local sin recargar la app.
     const relatedInstallments = installments.filter(item => item.movement_id === id)
@@ -224,6 +221,7 @@ function FinanceApp({ household, userId, onSignOut }: { household: Household; us
     } else {
       setMovements(current => current.filter(item => item.id !== id))
     }
+    setDeleteTarget(null)
     notify('Movimiento eliminado correctamente')
   }
   function changeMonth(delta: number) { const d = new Date(month + '-15T12:00:00'); d.setMonth(d.getMonth() + delta); setMonth(monthKey(d.toISOString())) }
@@ -289,7 +287,7 @@ function FinanceApp({ household, userId, onSignOut }: { household: Household; us
         {page === 'movements' && <>
           <div className="page-heading"><div><div className="eyebrow">REGISTRO</div><h1>Movimientos</h1><p>Ingresos y gastos de ustedes dos.</p></div><button className="primary-button" onClick={() => { setEditing(null); setModal(true) }}><Plus size={17} /> Nuevo movimiento</button></div>
           <div className="toolbar"><div className="search-box"><Search size={17} /><input placeholder="Buscar concepto o categoría..." value={search} onChange={e => setSearch(e.target.value)} /></div><div className="filter-wrap"><ListFilter size={16} /><select value={filter} onChange={e => setFilter(e.target.value)}><option>Todos</option><option>Agus</option><option>Camila</option><option>Compartido</option></select></div><button className="subtle-button export-button" onClick={exportCsv}><Download size={16} /> Exportar</button></div>
-          <div className="panel table-panel">{filtered.length ? <div className="table-scroll"><table><thead><tr><th>Movimiento</th><th>Persona</th><th>Fecha</th><th className="align-right">Importe</th><th></th></tr></thead><tbody>{filtered.map(m => <tr key={m.id}><td><div className="table-concept"><span className={m.kind === 'income' ? 'mini-kind income-kind' : 'mini-kind expense-kind'}>{m.kind === 'income' ? <ArrowDownLeft size={15} /> : <ArrowUpRight size={15} />}</span><div><strong>{m.concept}</strong><small>{m.category}{m.comment ? ' · ' + m.comment : ''}</small></div></div></td><td><PersonTag person={m.person} /></td><td className="date-cell">{dateLabel(m.date)}</td><td className={m.kind === 'income' ? 'align-right amount-income' : 'align-right amount-expense'}>{m.kind === 'income' ? '+' : '−'}{money(m.amount)}</td><td><div className="row-actions"><button className="icon-button small" title="Editar" onClick={() => { setEditing(m); setModal(true) }}><SlidersHorizontal size={15} /></button><button className="icon-button small danger-hover" title="Eliminar" onClick={() => removeMovement(m.id)}><Trash2 size={15} /></button></div></td></tr>)}</tbody></table></div> : <EmptyState text="No encontramos movimientos con esos filtros." />}</div>
+          <div className="panel table-panel">{filtered.length ? <div className="table-scroll"><table><thead><tr><th>Movimiento</th><th>Persona</th><th>Fecha</th><th className="align-right">Importe</th><th></th></tr></thead><tbody>{filtered.map(m => <tr key={m.id}><td><div className="table-concept"><span className={m.kind === 'income' ? 'mini-kind income-kind' : 'mini-kind expense-kind'}>{m.kind === 'income' ? <ArrowDownLeft size={15} /> : <ArrowUpRight size={15} />}</span><div><strong>{m.concept}</strong><small>{m.category}{m.comment ? ' · ' + m.comment : ''}</small></div></div></td><td><PersonTag person={m.person} /></td><td className="date-cell">{dateLabel(m.date)}</td><td className={m.kind === 'income' ? 'align-right amount-income' : 'align-right amount-expense'}>{m.kind === 'income' ? '+' : '−'}{money(m.amount)}</td><td><div className="row-actions"><button className="icon-button small" title="Editar" onClick={() => { setEditing(m); setModal(true) }}><SlidersHorizontal size={15} /></button><button className="icon-button small danger-hover" title="Eliminar" onClick={() => setDeleteTarget(m)}><Trash2 size={15} /></button></div></td></tr>)}</tbody></table></div> : <EmptyState text="No encontramos movimientos con esos filtros." />}</div>
         </>}
         {page === 'installments' && <InstallmentsPage plans={plans} installments={installments} onCreate={() => setInstallmentForm(true)} onToggle={toggleInstallment} />}
         {page === 'categories' && <><div className="page-heading"><div><div className="eyebrow">ORGANIZACIÓN</div><h1>Categorías</h1><p>Organizá los movimientos a tu manera.</p></div><button className="primary-button" onClick={async () => { const name = window.prompt('Nombre de la categoría'); if (!supabase || !name?.trim() || categories.some(c => c.name.toLowerCase() === name.trim().toLowerCase())) return; const { data, error } = await supabase.from('categories').insert({ household_id: household.id, name: name.trim(), type: 'expense', is_default: false }).select('id,name,type').single(); if (error) notify('Error: ' + error.message); else { setCategories([...categories, { id: data.id, name: data.name, kind: data.type as Kind }]); notify('Categoría creada') } }}><Plus size={17} /> Nueva categoría</button></div>
@@ -301,6 +299,22 @@ function FinanceApp({ household, userId, onSignOut }: { household: Household; us
     </main>
     {installmentForm && <InstallmentModal categories={categories} onClose={() => setInstallmentForm(false)} onSave={createInstallmentPlan} />}
     {modal && <MovementModal categories={categories} editing={editing} onClose={() => { setModal(false); setEditing(null) }} onSave={saveMovement} />}
+    {deleteTarget && <div className="modal-backdrop" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget && !deleting) setDeleteTarget(null) }}>
+      <section className="modal confirm-modal" role="dialog" aria-modal="true" aria-labelledby="delete-dialog-title">
+        <div className="confirm-icon"><Trash2 size={21} /></div>
+        <div className="confirm-copy">
+          <div className="eyebrow">CONFIRMAR ELIMINACIÓN</div>
+          <h2 id="delete-dialog-title">¿Eliminar este movimiento?</h2>
+          <p className="confirm-concept">{deleteTarget.concept}</p>
+          <div className="confirm-details"><span>{deleteTarget.kind === 'income' ? 'Ingreso' : 'Gasto'}</span><strong>{money(deleteTarget.amount)}</strong><span>{dateLabel(deleteTarget.date)}</span></div>
+          <p className="confirm-warning">{installments.some(item => item.movement_id === deleteTarget.id) ? 'Esta operación pertenece a una compra en cuotas. Se eliminarán la compra financiada, todos sus movimientos y todas sus cuotas.' : 'Esta acción no se puede deshacer. El movimiento se eliminará definitivamente.'}</p>
+        </div>
+        <div className="modal-footer confirm-actions">
+          <button className="secondary-button" type="button" onClick={() => setDeleteTarget(null)} disabled={deleting}>Cancelar</button>
+          <button className="danger-button" type="button" onClick={() => removeMovement(deleteTarget.id)} disabled={deleting}><Trash2 size={15}/>{deleting ? 'Eliminando...' : 'Sí, eliminar'}</button>
+        </div>
+      </section>
+    </div>}
     {toast && <div className="toast"><Check size={16} />{toast}</div>}
   </div>
 }
