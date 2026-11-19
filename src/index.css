@@ -49,3 +49,15 @@
 .quick-details{padding-top:15px}
 .quick-hint{font-size:10px;color:#9aa39b;line-height:1.5;margin:13px 0 5px}
 @media(max-width:650px){.quick-modal{padding:21px 17px 17px}.quick-amount-label .amount-input input{height:58px;font-size:27px}}
+
+
+/* Compras en cuotas */
+.installment-panel{padding:20px;margin-top:15px}
+.installment-list{display:grid}
+.installment-row{display:flex;align-items:center;gap:17px;padding:14px 0;border-top:1px solid #f0f2ee}
+.installment-date{width:90px;flex-shrink:0}.installment-date strong,.installment-main strong{display:block;font-size:11px;color:#3e4a41}.installment-date small,.installment-main small{display:block;font-size:9px;color:#929b93;margin-top:4px}
+.installment-main{flex:1;min-width:0}.installment-amount{font-size:12px;white-space:nowrap;color:#3b493e}
+.installment-paid{white-space:nowrap;border:1px solid var(--line);padding:8px 10px}
+.paid-row{opacity:.7}.plan-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.plan-card{border:1px solid var(--line);border-radius:10px;padding:15px;display:grid;gap:8px}.plan-card>strong{font-size:12px;color:#354037}.plan-card>small{font-size:9px;color:#8d988f}.plan-numbers{display:flex;flex-wrap:wrap;gap:8px 15px;font-size:9px;color:#7b867d}.plan-progress{height:6px;background:#edf1ec;border-radius:10px;overflow:hidden}.plan-progress>div{height:100%;background:#71977a;border-radius:10px}.installment-preview{background:#f2f6f1;border-radius:9px;padding:13px 14px;margin:4px 0 15px;display:grid;gap:5px}.installment-preview span,.installment-preview small{font-size:10px;color:#7d897e}.installment-preview strong{font-size:18px;color:#315b3e}.installment-modal{width:min(540px,100%)}
+@media(max-width:650px){.installment-stats{grid-template-columns:1fr 1fr}.installment-stats .stat-card:last-child{grid-column:auto}.installment-row{gap:9px;flex-wrap:wrap}.installment-date{width:75px}.installment-main{min-width:100px}.installment-paid{margin-left:auto}.plan-grid{grid-template-columns:1fr}}
