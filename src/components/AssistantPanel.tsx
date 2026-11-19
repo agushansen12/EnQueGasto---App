@@ -63,9 +63,9 @@ function parseMovement(text: string, categories: Category[], identity: Person): 
 
   // Inferimos el tipo por el sentido de la frase y por conceptos exclusivos de ingresos.
   // No exigimos que la persona escriba literalmente "gasté" o "cobré".
-  const incomeSignals = /\\b(cobre|cobro|cobré|me pagaron|me depositaron|recibi|recibí|ingreso|ingresaron|me transfirieron|vend[ií]|sueldo|salario|honorarios|dividendos|intereses)\\b/.test(clean)
-  const expenseSignals = /\\b(gaste|gasté|pague|pagué|compre|compr[eé]|abone|abon[eé]|pedi|ped[ií]|consumi|consum[ií]|contrate|contrat[eé])\\b/.test(clean)
-  const incomeOnlyConcept = /\\b(sueldo|salario|honorarios|dividendos|intereses|trabajo extra|changa|freelance)\\b/.test(clean)
+  const incomeSignals = /\b(cobre|cobro|cobré|me pagaron|me depositaron|recibi|recibí|ingreso|ingresaron|me transfirieron|vend[ií]|sueldo|salario|honorarios|dividendos|intereses)\b/.test(clean)
+  const expenseSignals = /\b(gaste|gasté|pague|pagué|compre|compr[eé]|abone|abon[eé]|pedi|ped[ií]|consumi|consum[ií]|contrate|contrat[eé])\b/.test(clean)
+  const incomeOnlyConcept = /\b(sueldo|salario|honorarios|dividendos|intereses|trabajo extra|changa|freelance)\b/.test(clean)
   const kind: Kind = incomeSignals || (!expenseSignals && incomeOnlyConcept) ? 'income' : 'expense'
   const rules: Array<{ category: string; words: string[]; concept: string }> = [
     { category: 'Alquiler', words: ['alquiler', 'renta'], concept: 'Alquiler' },
