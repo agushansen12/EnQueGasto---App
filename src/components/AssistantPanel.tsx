@@ -18,7 +18,27 @@ const today = () => new Date().toLocaleDateString('en-CA')
 const normalize = (value: string) => value.toLocaleLowerCase('es-AR').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 
 function parseAmount(text: string): number | null {
-  const match = text.match(/\$?\s*(\d[\d.,]*)\s*(millones?|millon|mil|k|m)?\b/i)
+  const clean = normalize(text)
+
+  // Expresiones habituales en Argentina: "medio palo", "dos gambas", "15 lucas".
+  if (/\bmedio\s+(palo|millon)\b/.test(clean)) return 500000
+  if (/\bmedia\s+luca\b/.test(clean)) return 500
+
+  const spokenNumbers: Record<string, number> = {
+    un: 1, uno: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5,
+    seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10, quince: 15,
+    veinte: 20, treinta: 30, cuarenta: 40, cincuenta: 50, cien: 100
+  }
+  const spokenMatch = clean.match(/\b(un|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|quince|veinte|treinta|cuarenta|cincuenta|cien)\s+(lucas?|gambas?|palos?|millones?|millon)\b/)
+  if (spokenMatch) {
+    const unit = spokenMatch[2]
+    const multiplier = unit.startsWith('luca') ? 1000
+      : unit.startsWith('gamba') ? 100
+      : 1000000
+    return spokenNumbers[spokenMatch[1]] * multiplier
+  }
+
+  const match = text.match(/\$?\s*(\d[\d.,]*)\s*(millones?|millon|mil|k|m|lucas?|gambas?|palos?)?\b/i)
   if (!match) return null
   const raw = match[1]
   const suffix = normalize(match[2] ?? '')
@@ -29,8 +49,9 @@ function parseAmount(text: string): number | null {
     const parts = raw.split('.')
     value = parts[parts.length - 1]?.length === 3 ? Number(parts.join('')) : Number(raw)
   } else value = Number(raw)
-  if (suffix.startsWith('mil') || suffix === 'k') value *= 1000
-  if (suffix.startsWith('millon') || suffix === 'm') value *= 1000000
+  if (suffix.startsWith('mil') || suffix === 'k' || suffix.startsWith('luca')) value *= 1000
+  if (suffix.startsWith('gamba')) value *= 100
+  if (suffix.startsWith('millon') || suffix === 'm' || suffix.startsWith('palo')) value *= 1000000
   return Number.isFinite(value) && value > 0 ? value : null
 }
 
