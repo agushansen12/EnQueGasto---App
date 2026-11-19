@@ -179,3 +179,10 @@
 :root[data-theme="dark"] .assistant-message.user .assistant-message-icon{background:#493a2d;color:#e0b78f}
 @media(max-width:900px){.assistant-layout{grid-template-columns:1fr}.assistant-settings{display:grid;grid-template-columns:38px 1fr;align-items:center}.assistant-settings-icon{grid-row:1/3}.assistant-settings h2{align-self:end}.assistant-settings>p{grid-column:2}.assistant-settings .field-label,.assistant-rule{grid-column:1/-1}}
 @media(max-width:650px){.assistant-page{gap:16px}.assistant-page .page-heading{align-items:flex-start}.assistant-status{font-size:9px;padding:7px 8px}.assistant-chat{min-height:calc(100dvh - 250px)}.assistant-messages{padding:16px;min-height:300px}.assistant-message{max-width:96%}.assistant-settings{padding:16px}.assistant-receipt{gap:8px}}
+
+.assistant-choices{display:flex;flex-wrap:wrap;gap:8px;margin-top:11px}
+.assistant-choices button{border:1px solid var(--line);border-radius:9px;background:var(--surface);color:var(--text);padding:9px 13px;font:700 11px Manrope,sans-serif;cursor:pointer;transition:border-color .15s,background .15s}
+.assistant-choices button:hover:not(:disabled){border-color:var(--green);background:var(--bg)}
+.assistant-choices button:disabled{opacity:.5;cursor:not-allowed}
+:root[data-theme="dark"] .assistant-choices button{background:#26352b;border-color:#405346;color:#e3ebe5}
+:root[data-theme="dark"] .assistant-choices button:hover:not(:disabled){background:#304638;border-color:#8eb49a}
