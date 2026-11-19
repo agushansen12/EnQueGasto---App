@@ -61,18 +61,22 @@ function parseMovement(text: string, categories: Category[], identity: Person): 
   const amount = parseAmount(text)
   if (!amount) return { status: 'unknown' }
 
-  const incomeWords = ['cobre', 'cobro', 'me pagaron', 'me depositaron', 'recibi', 'sueldo', 'ingreso', 'vendi']
-  const kind: Kind = incomeWords.some(word => clean.includes(word)) ? 'income' : 'expense'
+  // Inferimos el tipo por el sentido de la frase y por conceptos exclusivos de ingresos.
+  // No exigimos que la persona escriba literalmente "gasté" o "cobré".
+  const incomeSignals = /\\b(cobre|cobro|cobré|me pagaron|me depositaron|recibi|recibí|ingreso|ingresaron|me transfirieron|vend[ií]|sueldo|salario|honorarios|dividendos|intereses)\\b/.test(clean)
+  const expenseSignals = /\\b(gaste|gasté|pague|pagué|compre|compr[eé]|abone|abon[eé]|pedi|ped[ií]|consumi|consum[ií]|contrate|contrat[eé])\\b/.test(clean)
+  const incomeOnlyConcept = /\\b(sueldo|salario|honorarios|dividendos|intereses|trabajo extra|changa|freelance)\\b/.test(clean)
+  const kind: Kind = incomeSignals || (!expenseSignals && incomeOnlyConcept) ? 'income' : 'expense'
   const rules: Array<{ category: string; words: string[]; concept: string }> = [
     { category: 'Alquiler', words: ['alquiler', 'renta'], concept: 'Alquiler' },
     { category: 'Expensas', words: ['expensas'], concept: 'Expensas' },
     { category: 'Supermercado', words: ['supermercado', 'super', 'carrefour', 'coto', 'dia%', 'verduleria', 'almacen', 'kiosco'], concept: 'Supermercado' },
-    { category: 'Servicios', words: ['luz', 'electricidad', 'edenor', 'edesur', 'internet', 'wifi', 'agua', 'gas', 'telefono', 'celular'], concept: 'Servicios' },
-    { category: 'Transporte', words: ['nafta', 'combustible', 'sube', 'recarga sube', 'carga sube', 'uber', 'cabify', 'taxi', 'colectivo', 'tren'], concept: 'Transporte' },
+    { category: 'Transporte', words: ['recarga sube', 'carga sube', 'sube', 'nafta', 'combustible', 'peaje', 'estacionamiento', 'uber', 'cabify', 'taxi', 'colectivo', 'tren', 'subte', 'bondi'], concept: 'Transporte' },
+    { category: 'Servicios', words: ['electricidad', 'edenor', 'edesur', 'internet', 'wifi', 'agua', 'gas', 'telefono', 'celular', 'factura de luz', 'servicio de'], concept: 'Servicios' },
     { category: 'Salud', words: ['farmacia', 'medicamento', 'remedio', 'consulta', 'medico', 'medica', 'dentista'], concept: 'Salud' },
     { category: 'Gastronomía', words: ['restaurant', 'restaurante', 'cafe', 'bar', 'delivery', 'pizza', 'hamburguesa'], concept: 'Gastronomía' },
     { category: 'Indumentaria', words: ['ropa', 'remera', 'zapatilla', 'pantalon', 'camisa', 'buzo', 'jean', 'vestido'], concept: 'Indumentaria' },
-    { category: 'Hogar', words: ['mueble', 'decoracion', 'ferreteria', 'heladera', 'sillon', 'colchon'], concept: 'Hogar' },
+    { category: 'Hogar', words: ['mueble', 'muebles', 'mesa', 'silla', 'cama', 'escritorio', 'placard', 'estanteria', 'lampara', 'decoracion', 'ferreteria', 'heladera', 'sillon', 'colchon', 'cortina', 'bazar', 'utensilios'], concept: 'Hogar' },
     { category: 'Sueldo', words: ['sueldo', 'salario', 'cobro del trabajo'], concept: 'Sueldo' },
     { category: 'Trabajo adicional', words: ['freelance', 'changa', 'trabajo extra'], concept: 'Trabajo adicional' },
     { category: 'Inversiones', words: ['inversion', 'intereses', 'dividendos'], concept: 'Inversiones' }
@@ -161,7 +165,7 @@ export default function AssistantPanel({ categories, onSave }: { categories: Cat
     setMessages(current => [...current, { role: 'user', text }])
     const result = parseMovement(text, categories, identity)
     if (result.status === 'unknown') {
-      setMessages(current => [...current, { role: 'assistant', text: 'No pude identificar con suficiente seguridad el importe o la categoría. Probá indicando el concepto y el monto, por ejemplo: “pagué 12.000 de supermercado”. Por ahora reconozco las categorías habituales del hogar.' }])
+      setMessages(current => [...current, { role: 'assistant', text: 'No pude identificar con suficiente seguridad el importe o el concepto. No hace falta que escribas “gasté” o “cobré”: podés poner “mueble 20 mil”, “recarga SUBE 10 mil” o “sueldo 1 millón”. Si la frase puede ser un gasto o un ingreso, te voy a pedir que lo aclares antes de registrarlo.' }])
       return
     }
     if (result.status === 'clarify') {
