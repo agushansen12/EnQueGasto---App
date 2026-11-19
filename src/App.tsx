@@ -142,41 +142,54 @@ function FinanceApp({ household, userId, onSignOut }: { household: Household; us
     if (!supabase) return
     const categoryId = categories.find(c => c.name === input.category && c.kind === 'expense')?.id
     if (!categoryId) { notify('Elegí una categoría válida'); return }
-    const planResult = await supabase.from('installment_plans').insert({
-      household_id: household.id, concept: input.concept, category_id: categoryId, person: input.person,
-      purchase_total: input.purchaseTotal, financed_total: input.financedTotal, installment_count: input.count,
-      first_due_date: input.firstDueDate, recorded_by: userId, comment: input.comment || null
-    }).select('id').single()
-    if (planResult.error || !planResult.data) { notify('No se pudo crear el plan: ' + (planResult.error?.message ?? 'Error')); return }
-    const planId = planResult.data.id
-    const base = Math.floor((input.financedTotal / input.count) * 100) / 100
-    const rows = Array.from({ length: input.count }, (_, i) => {
-      const due = new Date(input.firstDueDate + 'T12:00:00'); due.setMonth(due.getMonth() + i)
-      const dueDate = due.toISOString().slice(0, 10)
-      const amount = i === input.count - 1 ? Math.round((input.financedTotal - base * (input.count - 1)) * 100) / 100 : base
-      return { household_id: household.id, category_id: categoryId, type: 'expense', concept: input.concept + ' (' + (i + 1) + '/' + input.count + ')', amount, movement_date: dueDate, person: input.person, comment: input.comment || null, recorded_by: userId, payment_method: 'credit', installment_plan_id: planId, installment_number: i + 1 }
+
+    const { data, error } = await supabase.rpc('create_installment_plan', {
+      p_household_id: household.id,
+      p_concept: input.concept.trim(),
+      p_category_id: categoryId,
+      p_person: input.person,
+      p_purchase_total: input.purchaseTotal,
+      p_financed_total: input.financedTotal,
+      p_installment_count: input.count,
+      p_first_due_date: input.firstDueDate,
+      p_comment: input.comment.trim() || null
     })
-    const movementResult = await supabase.from('movements').insert(rows).select('id,movement_date,amount')
-    if (movementResult.error || !movementResult.data) {
-      await supabase.from('installment_plans').delete().eq('id', planId)
-      notify('No se pudieron generar los gastos: ' + (movementResult.error?.message ?? 'Error')); return
+
+    if (error || !data) {
+      notify('No se pudo registrar la compra en cuotas: ' + (error?.message ?? 'No se recibió una confirmación del servidor.'))
+      return
     }
-    const installmentRows = movementResult.data.map((movement, i) => ({
-      household_id: household.id, plan_id: planId, movement_id: movement.id,
-      installment_number: i + 1, due_date: movement.movement_date, amount: Number(movement.amount), status: 'pending'
+
+    const created = data as {
+      plan_id: string
+      movements: Array<{ id: string; movement_date: string; amount: number; installment_number: number }>
+      installments: Installment[]
+    }
+    const newMovements: Movement[] = created.movements.map(m => ({
+      id: m.id,
+      date: m.movement_date,
+      kind: 'expense',
+      concept: input.concept.trim() + ' (' + m.installment_number + '/' + input.count + ')',
+      category: input.category,
+      person: input.person,
+      amount: Number(m.amount),
+      comment: input.comment.trim() || undefined,
+      recordedBy: userId
     }))
-    const installmentResult = await supabase.from('installments').insert(installmentRows)
-    if (installmentResult.error) {
-      await supabase.from('movements').delete().eq('installment_plan_id', planId)
-      await supabase.from('installment_plans').delete().eq('id', planId)
-      notify('No se pudieron guardar las cuotas: ' + installmentResult.error.message); return
-    }
-    const newMovements: Movement[] = movementResult.data.map((m, i) => ({ id: m.id, date: m.movement_date, kind: 'expense', concept: rows[i].concept, category: input.category, person: input.person, amount: Number(m.amount), comment: input.comment || undefined, recordedBy: userId }))
     setMovements(current => [...newMovements, ...current])
-    setPlans(current => [...current, { id: planId, concept: input.concept, person: input.person, purchase_total: input.purchaseTotal, financed_total: input.financedTotal, installment_count: input.count, first_due_date: input.firstDueDate, status: 'active' }])
-    const { data: savedInstallments } = await supabase.from('installments').select('id,plan_id,movement_id,installment_number,due_date,amount,status').eq('plan_id', planId).order('installment_number')
-    setInstallments(current => [...current, ...((savedInstallments ?? []) as Installment[])])
-    setInstallmentForm(false); notify('Compra en cuotas registrada')
+    setPlans(current => [...current, {
+      id: created.plan_id,
+      concept: input.concept.trim(),
+      person: input.person,
+      purchase_total: input.purchaseTotal,
+      financed_total: input.financedTotal,
+      installment_count: input.count,
+      first_due_date: input.firstDueDate,
+      status: 'active'
+    }])
+    setInstallments(current => [...current, ...created.installments])
+    setInstallmentForm(false)
+    notify('Compra en cuotas registrada')
   }
   async function toggleInstallment(item: Installment) {
     if (!supabase) return
