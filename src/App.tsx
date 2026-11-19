@@ -210,9 +210,21 @@ function FinanceApp({ household, userId, onSignOut }: { household: Household; us
     if (!confirmed) return
     const { error } = await supabase.rpc('delete_movement', { p_movement_id: id })
     if (error) { notify('Error al eliminar: ' + error.message); return }
-    // La función también puede eliminar un plan completo y todas sus cuotas.
-    // Recargar evita dejar datos relacionados visibles en el estado local.
-    window.location.reload()
+    // Mantener al usuario en Movimientos y actualizar el estado local sin recargar la app.
+    const relatedInstallments = installments.filter(item => item.movement_id === id)
+    const planId = relatedInstallments[0]?.plan_id
+
+    if (planId) {
+      const deletedMovementIds = new Set(
+        installments.filter(item => item.plan_id === planId).map(item => item.movement_id)
+      )
+      setMovements(current => current.filter(item => !deletedMovementIds.has(item.id)))
+      setInstallments(current => current.filter(item => item.plan_id !== planId))
+      setPlans(current => current.filter(plan => plan.id !== planId))
+    } else {
+      setMovements(current => current.filter(item => item.id !== id))
+    }
+    notify('Movimiento eliminado correctamente')
   }
   function changeMonth(delta: number) { const d = new Date(month + '-15T12:00:00'); d.setMonth(d.getMonth() + delta); setMonth(monthKey(d.toISOString())) }
   function exportCsv() {
