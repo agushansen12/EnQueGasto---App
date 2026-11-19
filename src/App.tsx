@@ -211,22 +211,51 @@ function MovementModal({ categories, editing, onClose, onSave }: { categories: C
   const [concept, setConcept] = useState(editing?.concept ?? '')
   const [amount, setAmount] = useState(editing ? String(editing.amount) : '')
   const [category, setCategory] = useState(editing?.category ?? categories.find(c => c.kind === 'expense')?.name ?? '')
-  const [person, setPerson] = useState<Person>(editing?.person ?? 'Compartido')
+  const [person, setPerson] = useState<Person>(editing?.person ?? (localStorage.getItem('enquegasto-last-person') as Person | null) ?? 'Compartido')
   const [date, setDate] = useState(editing?.date ?? today)
   const [comment, setComment] = useState(editing?.comment ?? '')
+  const [showDetails, setShowDetails] = useState(Boolean(editing))
   const availableCategories = categories.filter(c => c.kind === kind)
-  useEffect(() => { if (!availableCategories.some(c => c.name === category)) setCategory(availableCategories[0]?.name ?? '') }, [kind, categories])
-  function submit(e: FormEvent) { e.preventDefault(); const value = Number(amount.replace(',', '.')); if (!concept.trim() || !Number.isFinite(value) || value <= 0 || !category) return; onSave({ id: editing?.id ?? crypto.randomUUID(), date, kind, concept: concept.trim(), category, person, amount: value, comment: comment.trim() || undefined, recordedBy: 'Agus' }) }
-  return <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}><form className="modal" onSubmit={submit}><div className="modal-header"><div><div className="eyebrow">{editing ? 'ACTUALIZAR REGISTRO' : 'NUEVO REGISTRO'}</div><h2>{editing ? 'Editar movimiento' : 'Agregar movimiento'}</h2></div><button type="button" className="icon-button" onClick={onClose}><X size={19} /></button></div>
+  useEffect(() => {
+    if (!availableCategories.some(c => c.name === category)) setCategory(availableCategories[0]?.name ?? '')
+  }, [kind, categories])
+  function suggestCategory(value: string) {
+    const text = value.toLowerCase()
+    const rules: [string[], string][] = [
+      [['super','carrefour','coto','dia','verduler','almacen','kiosco'], 'Supermercado'],
+      [['nafta','combustible','sube','uber','cabify','taxi','colectivo'], 'Transporte'],
+      [['farmacia','medicamento','consulta','medico','médico'], 'Salud'],
+      [['alquiler'], 'Alquiler'],
+      [['expensas'], 'Expensas'],
+      [['luz','electricidad','edenor','edesur','internet','wifi','agua','gas'], 'Servicios'],
+      [['restaurant','restaurante','cafe','café','bar','delivery','pedido'], 'Gastronomía'],
+      [['ropa','zapatilla','remera','pantalon','pantalón'], 'Indumentaria'],
+      [['mueble','decoracion','decoración','ferreteria','ferretería'], 'Hogar']
+    ]
+    const match = rules.find(([words, name]) => availableCategories.some(c => c.name === name) && words.some(word => text.includes(word)))
+    if (match) setCategory(match[1])
+  }
+  function submit(e: FormEvent) {
+    e.preventDefault()
+    const value = Number(amount.replace(',', '.'))
+    if (!concept.trim() || !Number.isFinite(value) || value <= 0 || !category) return
+    localStorage.setItem('enquegasto-last-person', person)
+    onSave({ id: editing?.id ?? crypto.randomUUID(), date, kind, concept: concept.trim(), category, person, amount: value, comment: comment.trim() || undefined, recordedBy: 'Agus' })
+  }
+  return <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}><form className="modal quick-modal" onSubmit={submit}>
+    <div className="modal-header"><div><div className="eyebrow">{editing ? 'ACTUALIZAR REGISTRO' : 'CARGA RÁPIDA'}</div><h2>{editing ? 'Editar movimiento' : '¿Qué registramos?'}</h2></div><button type="button" className="icon-button" onClick={onClose}><X size={19} /></button></div>
     <div className="kind-switch"><button type="button" className={kind === 'expense' ? 'selected expense-selected' : ''} onClick={() => setKind('expense')}><ArrowUpRight size={16} /> Gasto</button><button type="button" className={kind === 'income' ? 'selected income-selected' : ''} onClick={() => setKind('income')}><ArrowDownLeft size={16} /> Ingreso</button></div>
-    <label className="field-label">Concepto<input autoFocus placeholder="Ej. Compra del supermercado" value={concept} onChange={e => setConcept(e.target.value)} required /></label>
-    <div className="field-grid"><label className="field-label">Importe<div className="amount-input"><span>$</span><input type="number" min="1" step="0.01" placeholder="0" value={amount} onChange={e => setAmount(e.target.value)} required /></div></label><label className="field-label">Fecha<input type="date" value={date} onChange={e => setDate(e.target.value)} required /></label></div>
-    <div className="field-grid"><label className="field-label">Categoría<select value={category} onChange={e => setCategory(e.target.value)} required>{availableCategories.map(c => <option key={c.name}>{c.name}</option>)}</select></label><label className="field-label">¿De quién es?<select value={person} onChange={e => setPerson(e.target.value as Person)}><option>Compartido</option><option>Agus</option><option>Camila</option></select></label></div>
-    <label className="field-label">Comentario <span className="optional">(opcional)</span><textarea rows={2} placeholder="Un detalle para recordar..." value={comment} onChange={e => setComment(e.target.value)} /></label>
-    <div className="modal-footer"><button type="button" className="secondary-button" onClick={onClose}>Cancelar</button><button className="primary-button" type="submit"><Check size={16} /> {editing ? 'Guardar cambios' : 'Guardar movimiento'}</button></div>
-    </form></div>
+    <label className="field-label quick-amount-label">¿Cuánto? <div className="amount-input"><span>$</span><input autoFocus type="number" min="1" step="0.01" inputMode="decimal" placeholder="0" value={amount} onChange={e => setAmount(e.target.value)} required /></div></label>
+    <label className="field-label">¿En qué fue? <input placeholder="Ej. Supermercado, nafta, sueldo..." value={concept} onChange={e => { setConcept(e.target.value); suggestCategory(e.target.value) }} required /></label>
+    <button type="button" className="details-toggle" onClick={() => setShowDetails(!showDetails)}><SlidersHorizontal size={14} /> {showDetails ? 'Ocultar detalles' : 'Agregar detalles (opcional)'} <ChevronDown size={14} className={showDetails ? 'rotate-chevron' : ''} /></button>
+    {showDetails && <div className="quick-details">
+      <div className="field-grid"><label className="field-label">Categoría sugerida<select value={category} onChange={e => setCategory(e.target.value)} required>{availableCategories.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}</select></label><label className="field-label">¿De quién es?<select value={person} onChange={e => setPerson(e.target.value as Person)}><option>Compartido</option><option>Agus</option><option>Camila</option></select></label></div>
+      <div className="field-grid"><label className="field-label">Fecha<input type="date" value={date} onChange={e => setDate(e.target.value)} required /></label><label className="field-label">Comentario <span className="optional">(opcional)</span><input placeholder="Un detalle..." value={comment} onChange={e => setComment(e.target.value)} /></label></div>
+    </div>}
+    <div className="quick-hint">La fecha y la categoría se completan automáticamente. Podés cambiarlas cuando quieras.</div>
+    <div className="modal-footer"><button type="button" className="secondary-button" onClick={onClose}>Cancelar</button><button className="primary-button" type="submit"><Check size={16} /> {editing ? 'Guardar cambios' : 'Guardar gasto'}</button></div>
+  </form></div>
 }
-
 
 // Se conserva el panel anterior mientras se conecta su persistencia compartida.
 void FinanceApp
