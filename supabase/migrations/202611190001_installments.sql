@@ -31,19 +31,27 @@ alter table public.movements
   add constraint movements_installment_plan_household_fk
   foreign key (installment_plan_id, household_id)
   references public.installment_plans(id, household_id)
-  on delete set null;
+  on delete restrict;
+
+alter table public.movements
+  add constraint movements_id_household_unique unique (id, household_id);
 
 create table if not exists public.installments (
   id uuid primary key default gen_random_uuid(),
-  plan_id uuid not null references public.installment_plans(id) on delete cascade,
-  movement_id uuid not null unique references public.movements(id) on delete cascade,
+  household_id uuid not null references public.households(id) on delete cascade,
+  plan_id uuid not null,
+  movement_id uuid not null,
   installment_number integer not null check (installment_number > 0),
   due_date date not null,
   amount numeric(14,2) not null check (amount > 0),
   status text not null default 'pending' check (status in ('pending', 'paid')),
   paid_at timestamptz,
   created_at timestamptz not null default now(),
-  unique (plan_id, installment_number)
+  unique (plan_id, installment_number),
+  foreign key (plan_id, household_id)
+    references public.installment_plans(id, household_id) on delete cascade,
+  foreign key (movement_id, household_id)
+    references public.movements(id, household_id) on delete cascade
 );
 
 create index if not exists installments_due_date_idx
@@ -81,24 +89,12 @@ using (public.is_household_member(household_id));
 drop policy if exists "Members can view installments" on public.installments;
 create policy "Members can view installments"
 on public.installments for select to authenticated
-using (
-  exists (
-    select 1 from public.installment_plans p
-    where p.id = installments.plan_id
-      and public.is_household_member(p.household_id)
-  )
-);
+using (public.is_household_member(household_id));
 
 drop policy if exists "Members can create installments" on public.installments;
 create policy "Members can create installments"
 on public.installments for insert to authenticated
-with check (
-  exists (
-    select 1 from public.installment_plans p
-    where p.id = installments.plan_id
-      and public.is_household_member(p.household_id)
-  )
-);
+with check (public.is_household_member(household_id));
 
 drop policy if exists "Members can update installments" on public.installments;
 create policy "Members can update installments"
