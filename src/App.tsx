@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
-import { Activity, ArrowDownLeft, ArrowLeft, ArrowRight, ArrowUpRight, CalendarDays, ChartNoAxesCombined, Check, ChevronDown, CircleHelp, Download, LayoutDashboard, ListFilter, Plus, Search, Settings, SlidersHorizontal, Trash2, Wallet, X } from 'lucide-react'
+import { Activity, ArrowDownLeft, ArrowLeft, ArrowRight, ArrowUpRight, CalendarDays, ChartNoAxesCombined, Check, ChevronDown, CircleHelp, Download, Fingerprint, LayoutDashboard, ListFilter, Plus, Search, Settings, SlidersHorizontal, Trash2, Wallet, X } from 'lucide-react'
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
 type Kind = 'expense' | 'income'
@@ -41,6 +41,7 @@ function FinanceApp({ household, userId, onSignOut }: { household: Household; us
   const [analyticsPerson, setAnalyticsPerson] = useState('Todos')
   const [search, setSearch] = useState('')
   const [toast, setToast] = useState('')
+  const [passkeyBusy, setPasskeyBusy] = useState(false)
   useEffect(() => {
     let active = true
     async function loadData() {
@@ -110,6 +111,16 @@ function FinanceApp({ household, userId, onSignOut }: { household: Household; us
   const filtered = movements.filter(m => (filter === 'Todos' || m.person === filter) && (m.concept.toLowerCase().includes(search.toLowerCase()) || m.category.toLowerCase().includes(search.toLowerCase()))).sort((a, b) => b.date.localeCompare(a.date))
 
   function notify(message: string) { setToast(message); window.setTimeout(() => setToast(''), 2400) }
+  async function registerPasskey() {
+    if (!supabase) return
+    if (!window.isSecureContext || !window.PublicKeyCredential) { notify('Este navegador no admite passkeys en este contexto.'); return }
+    setPasskeyBusy(true)
+    const { data, error } = await supabase.auth.registerPasskey()
+    setPasskeyBusy(false)
+    if (error) { notify('No se pudo registrar: ' + error.message); return }
+    notify('Passkey registrada correctamente en este dispositivo')
+    return data
+  }
   async function saveMovement(m: Movement) {
     if (!supabase) return
     const categoryId = categories.find(c => c.name === m.category && c.kind === m.kind)?.id
@@ -245,7 +256,7 @@ function FinanceApp({ household, userId, onSignOut }: { household: Household; us
         {page === 'categories' && <><div className="page-heading"><div><div className="eyebrow">ORGANIZACIÓN</div><h1>Categorías</h1><p>Organizá los movimientos a tu manera.</p></div><button className="primary-button" onClick={async () => { const name = window.prompt('Nombre de la categoría'); if (!supabase || !name?.trim() || categories.some(c => c.name.toLowerCase() === name.trim().toLowerCase())) return; const { data, error } = await supabase.from('categories').insert({ household_id: household.id, name: name.trim(), type: 'expense', is_default: false }).select('id,name,type').single(); if (error) notify('Error: ' + error.message); else { setCategories([...categories, { id: data.id, name: data.name, kind: data.type as Kind }]); notify('Categoría creada') } }}><Plus size={17} /> Nueva categoría</button></div>
           <div className="category-columns"><CategoryGroup title="Gastos" kind="expense" categories={categories} onDelete={async name => { const category = categories.find(c => c.name === name); if (!category || !supabase) return; const { error } = await supabase.from('categories').delete().eq('id', category.id).eq('household_id', household.id); if (error) notify('No se pudo eliminar: puede tener movimientos asociados.'); else { setCategories(categories.filter(c => c.id !== category.id)); notify('Categoría eliminada') } }} /><CategoryGroup title="Ingresos" kind="income" categories={categories} onDelete={name => setCategories(categories.filter(c => c.name !== name))} /></div>
         </>}
-        {page === 'settings' && <><div className="page-heading"><div><div className="eyebrow">PREFERENCIAS</div><h1>Ajustes</h1><p>Configuración de tu espacio compartido.</p></div></div><div className="panel settings-panel"><div className="settings-row"><div className="settings-symbol"><Wallet size={19} /></div><div><strong>Hogar compartido</strong><p>Agus y Camila</p></div><span className="settings-value">Espacio personal</span></div><div className="settings-row"><div className="settings-symbol"><Download size={19} /></div><div><strong>Exportar movimientos</strong><p>Descargá tus registros en formato CSV para abrirlos en Excel.</p></div><button className="subtle-button" onClick={exportCsv}>Exportar <ArrowRight size={15} /></button></div><div className="settings-row"><div className="settings-symbol"><Activity size={19} /></div><div><strong>Almacenamiento</strong><p>Movimientos y categorías guardados en el hogar compartido de Supabase.</p></div><span className="settings-value">Compartido</span></div></div></>}
+        {page === 'settings' && <><div className="page-heading"><div><div className="eyebrow">PREFERENCIAS</div><h1>Ajustes</h1><p>Configuración de tu espacio compartido.</p></div></div><div className="panel settings-panel"><div className="settings-row"><div className="settings-symbol"><Wallet size={19} /></div><div><strong>Hogar compartido</strong><p>Agus y Camila</p></div><span className="settings-value">Espacio personal</span></div><div className="settings-row"><div className="settings-symbol"><Fingerprint size={19} /></div><div><strong>Ingreso con huella o Face ID</strong><p>Registrá una passkey en este dispositivo para entrar sin escribir tu contraseña.</p></div><button className="subtle-button" onClick={registerPasskey} disabled={passkeyBusy}>{passkeyBusy ? 'Registrando...' : 'Configurar'} <ArrowRight size={15} /></button></div><div className="settings-row"><div className="settings-symbol"><Download size={19} /></div><div><strong>Exportar movimientos</strong><p>Descargá tus registros en formato CSV para abrirlos en Excel.</p></div><button className="subtle-button" onClick={exportCsv}>Exportar <ArrowRight size={15} /></button></div><div className="settings-row"><div className="settings-symbol"><Activity size={19} /></div><div><strong>Almacenamiento</strong><p>Movimientos y categorías guardados en el hogar compartido de Supabase.</p></div><span className="settings-value">Compartido</span></div></div></>}
       </div>
       <footer className="footer"><span>EnQuéGasto <span className="footer-dot">·</span> Hecho para organizar lo cotidiano.</span><span>Versión inicial 0.1</span></footer>
     </main>
@@ -374,6 +385,7 @@ function App() {
   const [authError, setAuthError] = useState('')
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
+  const [passkeyBusy, setPasskeyBusy] = useState(false)
 
   useEffect(() => {
     if (!supabase) { setLoading(false); return }
@@ -420,6 +432,16 @@ function App() {
     if (mode === 'signup' && !result.data.session) setMessage('Te enviamos un correo para confirmar tu cuenta. Después vas a poder iniciar sesión.')
   }
 
+  async function signInPasskey() {
+    if (!supabase) return
+    if (!window.isSecureContext || !window.PublicKeyCredential) { setAuthError('Este navegador no admite passkeys en este contexto.'); return }
+    setPasskeyBusy(true); setAuthError(''); setMessage('')
+    const { data, error } = await supabase.auth.signInWithPasskey()
+    setPasskeyBusy(false)
+    if (error) { setAuthError(error.message); return }
+    if (data.session) setSession(data.session)
+  }
+
   async function signOut() {
     if (!supabase) return
     await supabase.auth.signOut()
@@ -438,6 +460,7 @@ function App() {
     {authError && <div className="auth-error">{authError}</div>}
     {message && <div className="auth-message">{message}</div>}
     <button className="primary-button auth-submit" type="submit" disabled={busy}>{busy ? 'Un momento...' : mode === 'login' ? 'Iniciar sesión' : 'Crear cuenta'}</button>
+    {mode === 'login' && <><div className="auth-divider"><span>o también</span></div><button className="secondary-button auth-passkey" type="button" onClick={signInPasskey} disabled={passkeyBusy}><Fingerprint size={17} /> {passkeyBusy ? 'Esperando verificación...' : 'Ingresar con huella o Face ID'}</button></>}
     <button className="auth-toggle" type="button" onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setAuthError(''); setMessage('') }}>{mode === 'login' ? '¿No tenés cuenta? Crear una' : '¿Ya tenés cuenta? Iniciar sesión'}</button>
   </form></div>
   if (householdLoading) return <div className="auth-screen"><div className="auth-card"><div className="brand-mark"><Wallet size={21} /></div><p>Buscando tu hogar...</p></div></div>
