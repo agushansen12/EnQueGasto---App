@@ -186,3 +186,14 @@
 .assistant-choices button:disabled{opacity:.5;cursor:not-allowed}
 :root[data-theme="dark"] .assistant-choices button{background:#26352b;border-color:#405346;color:#e3ebe5}
 :root[data-theme="dark"] .assistant-choices button:hover:not(:disabled){background:#304638;border-color:#8eb49a}
+
+.page-heading-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.assistant-shortcut{border:1px solid var(--line);background:var(--surface);color:var(--text)}
+.assistant-shortcut:hover{border-color:var(--green);color:var(--green)}
+@media(max-width:650px){
+  .page-heading-actions{gap:7px}
+  .page-heading-actions .primary-button,.page-heading-actions .assistant-shortcut{font-size:0;width:39px;height:39px;padding:0;flex-shrink:0}
+  .page-heading-actions button svg{width:18px;height:18px}
+}
+:root[data-theme="dark"] .assistant-shortcut{background:#26352b;border-color:#405346;color:#d8e5db}
+:root[data-theme="dark"] .assistant-shortcut:hover{border-color:#8bb99a;color:#a5d3b2}
