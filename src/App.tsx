@@ -146,7 +146,7 @@ function FinanceApp({ household, userId, onSignOut }: { household: Household; us
     setModal(false); setEditing(null); notify(editing ? 'Movimiento actualizado' : 'Movimiento agregado')
   }
   async function saveAssistantMovement(draft: { date: string; kind: Kind; concept: string; category: string; person: Person; amount: number; comment?: string }): Promise<string | null> {
-    if (!supabase) return false
+    if (!supabase) return null
     const categoryId = categories.find(c => c.name === draft.category && c.kind === draft.kind)?.id
     if (!categoryId) { notify('No encontré una categoría válida para ese movimiento.'); return null }
     const payload = {
@@ -164,8 +164,32 @@ function FinanceApp({ household, userId, onSignOut }: { household: Household; us
     if (error || !data) { notify('No se pudo registrar: ' + (error?.message ?? 'Error desconocido')); return null }
     setMovements(current => [{ id: data.id, date: draft.date, kind: draft.kind, concept: draft.concept, category: draft.category, person: draft.person, amount: draft.amount, comment: draft.comment, recordedBy: userId }, ...current])
     notify('Movimiento registrado por el asistente')
+    return data.id as string
+  }
+
+  async function correctAssistantMovement(movementId: string, draft: { kind: Kind; concept: string }, category: string, phrase: string): Promise<boolean> {
+    if (!supabase) return false
+    const categoryId = categories.find(c => c.name === category && c.kind === draft.kind)?.id
+    if (!categoryId) { notify('No encontré esa categoría.'); return false }
+    const { error: movementError } = await supabase.from('movements').update({ category_id: categoryId }).eq('id', movementId).eq('household_id', household.id)
+    if (movementError) { notify('No se pudo corregir el movimiento: ' + movementError.message); return false }
+    const normalizedPhrase = phrase.toLocaleLowerCase('es-AR').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+    const rule = { household_id: household.id, phrase, normalized_phrase: normalizedPhrase, movement_type: draft.kind, category_name: category, canonical_concept: draft.concept, match_type: 'phrase', priority: 100, is_active: true }
+    const { error: learnError } = await supabase.from('assistant_knowledge').insert(rule)
+    if (learnError) {
+      const { data: existing } = await supabase.from('assistant_knowledge').select('id').eq('household_id', household.id).eq('normalized_phrase', normalizedPhrase).eq('movement_type', draft.kind).maybeSingle()
+      if (existing?.id) {
+        const { error: updateError } = await supabase.from('assistant_knowledge').update({ category_name: category, canonical_concept: draft.concept, priority: 100, is_active: true }).eq('id', existing.id)
+        if (updateError) { notify('Corregí el movimiento, pero no pude actualizar lo aprendido: ' + updateError.message); return false }
+      } else { notify('Corregí el movimiento, pero no pude guardar el aprendizaje: ' + learnError.message); return false }
+    }
+    setMovements(current => current.map(m => m.id === movementId ? { ...m, category } : m))
+    const { data: refreshed } = await supabase.from('assistant_knowledge').select('household_id,phrase,normalized_phrase,movement_type,category_name,canonical_concept,match_type,priority').eq('is_active', true).order('priority', { ascending: false })
+    if (refreshed) setAssistantKnowledge(refreshed as AssistantKnowledge[])
+    notify('Categoría corregida y aprendizaje guardado para el hogar')
     return true
   }
+
   async function createInstallmentPlan(input: { concept: string; category: string; person: Person; purchaseTotal: number; financedTotal: number; count: number; firstDueDate: string; comment: string }) {
     if (!supabase) return
     const categoryId = categories.find(c => c.name === input.category && c.kind === 'expense')?.id
