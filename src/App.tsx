@@ -183,6 +183,13 @@ function FinanceApp({ household, userId, onSignOut }: { household: Household; us
   }
   async function removeMovement(id: string) {
     if (!supabase) return
+    const movement = movements.find(item => item.id === id)
+    const concept = movement?.concept ?? 'este movimiento'
+    const amount = movement ? money(movement.amount) : ''
+    const confirmed = window.confirm(
+      `¿Eliminar "${concept}"${amount ? ` (${amount})` : ''}?\n\nEsta acción no se puede deshacer. Si pertenece a una compra en cuotas, se eliminará la compra financiada completa y todas sus cuotas.\n\n¿Querés continuar?`
+    )
+    if (!confirmed) return
     const { error } = await supabase.rpc('delete_movement', { p_movement_id: id })
     if (error) { notify('Error al eliminar: ' + error.message); return }
     // La función también puede eliminar un plan completo y todas sus cuotas.
