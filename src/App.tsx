@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
-import { Activity, ArrowDownLeft, ArrowLeft, ArrowRight, ArrowUpRight, CalendarDays, ChartNoAxesCombined, Check, ChevronDown, CircleHelp, Download, Fingerprint, LayoutDashboard, ListFilter, Moon, Plus, Search, Settings, SlidersHorizontal, Sun, Trash2, Wallet, X } from 'lucide-react'
+import AssistantPanel from './components/AssistantPanel'
+import { Activity, Bot, ArrowDownLeft, ArrowLeft, ArrowRight, ArrowUpRight, CalendarDays, ChartNoAxesCombined, Check, ChevronDown, CircleHelp, Download, Fingerprint, LayoutDashboard, ListFilter, Moon, Plus, Search, Settings, SlidersHorizontal, Sun, Trash2, Wallet, X } from 'lucide-react'
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
 type Kind = 'expense' | 'income'
@@ -18,6 +19,7 @@ const dateLabel = (date: string) => new Intl.DateTimeFormat('es-AR', { day: '2-d
 const nav = [
   { id: 'home', label: 'Resumen', icon: LayoutDashboard },
   { id: 'movements', label: 'Movimientos', icon: Activity },
+  { id: 'assistant', label: 'Asistente', icon: Bot },
   { id: 'dashboards', label: 'Dashboards', icon: ChartNoAxesCombined },
   { id: 'installments', label: 'Cuotas', icon: CalendarDays },
   { id: 'categories', label: 'Categorías', icon: SlidersHorizontal },
@@ -139,6 +141,27 @@ function FinanceApp({ household, userId, onSignOut }: { household: Household; us
     if (result.error) { notify('Error al guardar: ' + result.error.message); return }
     setMovements(current => editing ? current.map(x => x.id === m.id ? m : x) : [{ ...m, recordedBy: userId }, ...current])
     setModal(false); setEditing(null); notify(editing ? 'Movimiento actualizado' : 'Movimiento agregado')
+  }
+  async function saveAssistantMovement(draft: { date: string; kind: Kind; concept: string; category: string; person: Person; amount: number; comment?: string }): Promise<boolean> {
+    if (!supabase) return false
+    const categoryId = categories.find(c => c.name === draft.category && c.kind === draft.kind)?.id
+    if (!categoryId) { notify('No encontré una categoría válida para ese movimiento.'); return false }
+    const payload = {
+      household_id: household.id,
+      category_id: categoryId,
+      type: draft.kind,
+      concept: draft.concept,
+      amount: draft.amount,
+      movement_date: draft.date,
+      person: draft.person,
+      comment: draft.comment ?? null,
+      recorded_by: userId
+    }
+    const { data, error } = await supabase.from('movements').insert(payload).select('id').single()
+    if (error || !data) { notify('No se pudo registrar: ' + (error?.message ?? 'Error desconocido')); return false }
+    setMovements(current => [{ id: data.id, date: draft.date, kind: draft.kind, concept: draft.concept, category: draft.category, person: draft.person, amount: draft.amount, comment: draft.comment, recordedBy: userId }, ...current])
+    notify('Movimiento registrado por el asistente')
+    return true
   }
   async function createInstallmentPlan(input: { concept: string; category: string; person: Person; purchaseTotal: number; financedTotal: number; count: number; firstDueDate: string; comment: string }) {
     if (!supabase) return
@@ -289,6 +312,7 @@ function FinanceApp({ household, userId, onSignOut }: { household: Household; us
           <div className="toolbar"><div className="search-box"><Search size={17} /><input placeholder="Buscar concepto o categoría..." value={search} onChange={e => setSearch(e.target.value)} /></div><div className="filter-wrap"><ListFilter size={16} /><select value={filter} onChange={e => setFilter(e.target.value)}><option>Todos</option><option>Agus</option><option>Camila</option><option>Compartido</option></select></div><button className="subtle-button export-button" onClick={exportCsv}><Download size={16} /> Exportar</button></div>
           <div className="panel table-panel">{filtered.length ? <div className="table-scroll"><table><thead><tr><th>Movimiento</th><th>Persona</th><th>Fecha</th><th className="align-right">Importe</th><th></th></tr></thead><tbody>{filtered.map(m => <tr key={m.id}><td><div className="table-concept"><span className={m.kind === 'income' ? 'mini-kind income-kind' : 'mini-kind expense-kind'}>{m.kind === 'income' ? <ArrowDownLeft size={15} /> : <ArrowUpRight size={15} />}</span><div><strong>{m.concept}</strong><small>{m.category}{m.comment ? ' · ' + m.comment : ''}</small></div></div></td><td><PersonTag person={m.person} /></td><td className="date-cell">{dateLabel(m.date)}</td><td className={m.kind === 'income' ? 'align-right amount-income' : 'align-right amount-expense'}>{m.kind === 'income' ? '+' : '−'}{money(m.amount)}</td><td><div className="row-actions"><button className="icon-button small" title="Editar" onClick={() => { setEditing(m); setModal(true) }}><SlidersHorizontal size={15} /></button><button className="icon-button small danger-hover" title="Eliminar" onClick={() => setDeleteTarget(m)}><Trash2 size={15} /></button></div></td></tr>)}</tbody></table></div> : <EmptyState text="No encontramos movimientos con esos filtros." />}</div>
         </>}
+        {page === 'assistant' && <AssistantPanel categories={categories} onSave={saveAssistantMovement} />}
         {page === 'installments' && <InstallmentsPage plans={plans} installments={installments} onCreate={() => setInstallmentForm(true)} onToggle={toggleInstallment} />}
         {page === 'categories' && <><div className="page-heading"><div><div className="eyebrow">ORGANIZACIÓN</div><h1>Categorías</h1><p>Organizá los movimientos a tu manera.</p></div><button className="primary-button" onClick={async () => { const name = window.prompt('Nombre de la categoría'); if (!supabase || !name?.trim() || categories.some(c => c.name.toLowerCase() === name.trim().toLowerCase())) return; const { data, error } = await supabase.from('categories').insert({ household_id: household.id, name: name.trim(), type: 'expense', is_default: false }).select('id,name,type').single(); if (error) notify('Error: ' + error.message); else { setCategories([...categories, { id: data.id, name: data.name, kind: data.type as Kind }]); notify('Categoría creada') } }}><Plus size={17} /> Nueva categoría</button></div>
           <div className="category-columns"><CategoryGroup title="Gastos" kind="expense" categories={categories} onDelete={async name => { const category = categories.find(c => c.name === name); if (!category || !supabase) return; const { error } = await supabase.from('categories').delete().eq('id', category.id).eq('household_id', household.id); if (error) notify('No se pudo eliminar: puede tener movimientos asociados.'); else { setCategories(categories.filter(c => c.id !== category.id)); notify('Categoría eliminada') } }} /><CategoryGroup title="Ingresos" kind="income" categories={categories} onDelete={name => setCategories(categories.filter(c => c.name !== name))} /></div>
