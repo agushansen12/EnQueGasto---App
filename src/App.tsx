@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
-import { Activity, ArrowDownLeft, ArrowLeft, ArrowRight, ArrowUpRight, CalendarDays, ChartNoAxesCombined, Check, ChevronDown, CircleHelp, Download, Fingerprint, LayoutDashboard, ListFilter, Plus, Search, Settings, SlidersHorizontal, Trash2, Wallet, X } from 'lucide-react'
+import { Activity, ArrowDownLeft, ArrowLeft, ArrowRight, ArrowUpRight, CalendarDays, ChartNoAxesCombined, Check, ChevronDown, CircleHelp, Download, Fingerprint, LayoutDashboard, ListFilter, Moon, Plus, Search, Settings, SlidersHorizontal, Sun, Trash2, Wallet, X } from 'lucide-react'
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
 type Kind = 'expense' | 'income'
@@ -27,6 +27,11 @@ type Page = typeof nav[number]['id']
 
 function FinanceApp({ household, userId, onSignOut }: { household: Household; userId: string; onSignOut: () => void }) {
   const [page, setPage] = useState<Page>('home')
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => localStorage.getItem('enquegasto-theme') === 'dark' ? 'dark' : 'light')
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    localStorage.setItem('enquegasto-theme', theme)
+  }, [theme])
   const [movements, setMovements] = useState<Movement[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [installments, setInstallments] = useState<Installment[]>([])
@@ -215,7 +220,7 @@ function FinanceApp({ household, userId, onSignOut }: { household: Household; us
       <div className="sidebar-bottom"><div className="couple-avatar"><span>A</span><span>C</span></div><div className="couple-copy"><strong>Agus y Camila</strong><span>Hogar compartido</span></div><ChevronDown size={15} className="muted-icon" /></div>
     </aside>
     <main className="main-area">
-      <header className="topbar"><div className="breadcrumb">Finanzas <span>/</span> <strong>{nav.find(n => n.id === page)?.label}</strong></div><div className="top-actions"><span className="local-pill"><span className="status-dot" /> Sincronizado</span><button className="icon-button" title="Ayuda"><CircleHelp size={18} /></button><button className="user-avatar signout-avatar" title="Cerrar sesión" onClick={onSignOut}>A</button></div></header>
+      <header className="topbar"><div className="breadcrumb">Finanzas <span>/</span> <strong>{nav.find(n => n.id === page)?.label}</strong></div><div className="top-actions"><span className="local-pill"><span className="status-dot" /> Sincronizado</span><button className="icon-button theme-toggle" title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'} aria-label={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'} onClick={() => setTheme(current => current === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}</button><button className="icon-button" title="Ayuda"><CircleHelp size={18} /></button><button className="user-avatar signout-avatar" title="Cerrar sesión" onClick={onSignOut}>A</button></div></header>
       <div className="page-content">
         {page === 'home' && <><div className="page-heading"><div><div className="eyebrow">TU ECONOMÍA, EN CLARO</div><h1>Resumen</h1><p>Así se mueve la economía de tu hogar.</p></div><button className="primary-button" onClick={() => { setEditing(null); setModal(true) }}><Plus size={17} /> Nuevo movimiento</button></div>
           <div className="month-control"><button className="icon-button" onClick={() => changeMonth(-1)}><ArrowLeft size={17} /></button><CalendarDays size={16} /><span>{monthName}</span><button className="icon-button" onClick={() => changeMonth(1)}><ArrowRight size={17} /></button><button className="text-button" onClick={() => setMonth(monthKey(today))}>Este mes</button></div>
