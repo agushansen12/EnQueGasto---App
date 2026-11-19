@@ -16,6 +16,7 @@ type ParseResult =
 
 const today = () => new Date().toLocaleDateString('en-CA')
 const normalize = (value: string) => value.toLocaleLowerCase('es-AR').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+const hasTerm = (text: string, term: string) => term.endsWith('%') ? new RegExp(`(^|[^a-z0-9])${term.slice(0, -1)}%?($|[^a-z0-9])`).test(text) : new RegExp(`(^|[^a-z0-9])${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^a-z0-9])`).test(text)
 
 function parseAmount(text: string): number | null {
   const clean = normalize(text)
@@ -67,7 +68,7 @@ function parseMovement(text: string, categories: Category[], identity: Person): 
     { category: 'Expensas', words: ['expensas'], concept: 'Expensas' },
     { category: 'Supermercado', words: ['supermercado', 'super', 'carrefour', 'coto', 'dia%', 'verduleria', 'almacen', 'kiosco'], concept: 'Supermercado' },
     { category: 'Servicios', words: ['luz', 'electricidad', 'edenor', 'edesur', 'internet', 'wifi', 'agua', 'gas', 'telefono', 'celular'], concept: 'Servicios' },
-    { category: 'Transporte', words: ['nafta', 'combustible', 'sube', 'uber', 'cabify', 'taxi', 'colectivo', 'tren'], concept: 'Transporte' },
+    { category: 'Transporte', words: ['nafta', 'combustible', 'sube', 'recarga sube', 'carga sube', 'uber', 'cabify', 'taxi', 'colectivo', 'tren'], concept: 'Transporte' },
     { category: 'Salud', words: ['farmacia', 'medicamento', 'remedio', 'consulta', 'medico', 'medica', 'dentista'], concept: 'Salud' },
     { category: 'Gastronomía', words: ['restaurant', 'restaurante', 'cafe', 'bar', 'delivery', 'pizza', 'hamburguesa'], concept: 'Gastronomía' },
     { category: 'Indumentaria', words: ['ropa', 'remera', 'zapatilla', 'pantalon', 'camisa', 'buzo', 'jean', 'vestido'], concept: 'Indumentaria' },
@@ -82,7 +83,7 @@ function parseMovement(text: string, categories: Category[], identity: Person): 
   const mentionsFood = /\b(comida|comer|almuerzo|cena)\b/.test(clean)
   const hasSpecificFoodContext = rules
     .filter(rule => ['Supermercado', 'Gastronomía'].includes(rule.category))
-    .some(rule => rule.words.some(word => clean.includes(word)))
+    .some(rule => rule.words.some(word => hasTerm(clean, word)))
   if (kind === 'expense' && mentionsFood && !hasSpecificFoodContext) {
     const choices = ['Supermercado', 'Gastronomía']
       .filter(available)
@@ -101,7 +102,7 @@ function parseMovement(text: string, categories: Category[], identity: Person): 
     }
   }
 
-  const match = rules.find(rule => rule.words.some(word => clean.includes(word)) && available(rule.category))
+  const match = rules.find(rule => rule.words.some(word => hasTerm(clean, word)) && available(rule.category))
   if (!match) return { status: 'unknown' }
 
   let person: Person = ['Alquiler', 'Expensas', 'Servicios'].includes(match.category) ? 'Compartido' : identity
@@ -110,7 +111,7 @@ function parseMovement(text: string, categories: Category[], identity: Person): 
   else if (clean.includes('agus')) person = 'Agus'
 
   const concept = match.category === 'Indumentaria'
-    ? (match.words.find(word => clean.includes(word)) ?? 'Indumentaria')
+    ? (match.words.find(word => hasTerm(clean, word)) ?? 'Indumentaria')
     : match.concept
   const displayConcept = concept.charAt(0).toLocaleUpperCase('es-AR') + concept.slice(1)
   return { status: 'ready', draft: { date: today(), kind, concept: displayConcept, category: match.category, person, amount } }
