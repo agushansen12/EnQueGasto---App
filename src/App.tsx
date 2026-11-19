@@ -9,6 +9,7 @@ type Kind = 'expense' | 'income'
 type Person = 'Agus' | 'Camila' | 'Compartido'
 type Movement = { id: string; date: string; kind: Kind; concept: string; category: string; person: Person; amount: number; comment?: string; recordedBy: string }
 type Category = { id: string; name: string; kind: Kind }
+type Installment = { id: string; plan_id: string; movement_id: string; installment_number: number; due_date: string; amount: number; status: 'pending' | 'paid'; plan?: { concept: string; person: Person; installment_count: number } }
 
 const today = new Date().toISOString().slice(0, 10)
 const monthKey = (date: string) => date.slice(0, 7)
@@ -18,6 +19,7 @@ const nav = [
   { id: 'home', label: 'Resumen', icon: LayoutDashboard },
   { id: 'movements', label: 'Movimientos', icon: Activity },
   { id: 'dashboards', label: 'Dashboards', icon: ChartNoAxesCombined },
+  { id: 'installments', label: 'Cuotas', icon: CalendarDays },
   { id: 'categories', label: 'Categorías', icon: SlidersHorizontal },
   { id: 'settings', label: 'Ajustes', icon: Settings },
 ] as const
@@ -27,6 +29,9 @@ function FinanceApp({ household, userId, onSignOut }: { household: Household; us
   const [page, setPage] = useState<Page>('home')
   const [movements, setMovements] = useState<Movement[]>([])
   const [categories, setCategories] = useState<Category[]>([])
+  const [installments, setInstallments] = useState<Installment[]>([])
+  const [plans, setPlans] = useState<any[]>([])
+  const [installmentForm, setInstallmentForm] = useState(false)
   const [dataLoading, setDataLoading] = useState(true)
   const [dataError, setDataError] = useState('')
   const [month, setMonth] = useState(monthKey(today))
@@ -41,13 +46,15 @@ function FinanceApp({ household, userId, onSignOut }: { household: Household; us
     async function loadData() {
       if (!supabase) return
       setDataLoading(true); setDataError('')
-      const [categoryResult, movementResult] = await Promise.all([
+      const [categoryResult, movementResult, planResult, installmentResult] = await Promise.all([
         supabase.from('categories').select('id,name,type').eq('household_id', household.id).order('name'),
-        supabase.from('movements').select('id,category_id,type,concept,amount,movement_date,person,comment,recorded_by').eq('household_id', household.id).order('movement_date', { ascending: false })
+        supabase.from('movements').select('id,category_id,type,concept,amount,movement_date,person,comment,recorded_by').eq('household_id', household.id).order('movement_date', { ascending: false }),
+        supabase.from('installment_plans').select('id,concept,person,purchase_total,financed_total,installment_count,first_due_date,status').eq('household_id', household.id).order('first_due_date', { ascending: true }),
+        supabase.from('installments').select('id,plan_id,movement_id,installment_number,due_date,amount,status').eq('household_id', household.id).order('due_date', { ascending: true })
       ])
       if (!active) return
-      if (categoryResult.error || movementResult.error) {
-        setDataError(categoryResult.error?.message || movementResult.error?.message || 'No se pudieron cargar los datos.')
+      if (categoryResult.error || movementResult.error || planResult.error || installmentResult.error) {
+        setDataError(categoryResult.error?.message || movementResult.error?.message || planResult.error?.message || installmentResult.error?.message || 'No se pudieron cargar los datos.')
         setDataLoading(false); return
       }
       const loadedCategories = (categoryResult.data ?? []).map(c => ({ id: c.id, name: c.name, kind: c.type as Kind }))
@@ -58,7 +65,7 @@ function FinanceApp({ household, userId, onSignOut }: { household: Household; us
         person: m.person as Person, amount: Number(m.amount), comment: m.comment ?? undefined,
         recordedBy: m.recorded_by
       }))
-      setCategories(loadedCategories); setMovements(loadedMovements); setDataLoading(false)
+      setCategories(loadedCategories); setMovements(loadedMovements); setPlans(planResult.data ?? []); setInstallments((installmentResult.data ?? []) as Installment[]); setDataLoading(false)
     }
     loadData()
     return () => { active = false }
@@ -114,6 +121,54 @@ function FinanceApp({ household, userId, onSignOut }: { household: Household; us
     if (result.error) { notify('Error al guardar: ' + result.error.message); return }
     setMovements(current => editing ? current.map(x => x.id === m.id ? m : x) : [{ ...m, recordedBy: userId }, ...current])
     setModal(false); setEditing(null); notify(editing ? 'Movimiento actualizado' : 'Movimiento agregado')
+  }
+  async function createInstallmentPlan(input: { concept: string; category: string; person: Person; purchaseTotal: number; financedTotal: number; count: number; firstDueDate: string; comment: string }) {
+    if (!supabase) return
+    const categoryId = categories.find(c => c.name === input.category && c.kind === 'expense')?.id
+    if (!categoryId) { notify('Elegí una categoría válida'); return }
+    const planResult = await supabase.from('installment_plans').insert({
+      household_id: household.id, concept: input.concept, category_id: categoryId, person: input.person,
+      purchase_total: input.purchaseTotal, financed_total: input.financedTotal, installment_count: input.count,
+      first_due_date: input.firstDueDate, recorded_by: userId, comment: input.comment || null
+    }).select('id').single()
+    if (planResult.error || !planResult.data) { notify('No se pudo crear el plan: ' + (planResult.error?.message ?? 'Error')); return }
+    const planId = planResult.data.id
+    const base = Math.floor((input.financedTotal / input.count) * 100) / 100
+    const rows = Array.from({ length: input.count }, (_, i) => {
+      const due = new Date(input.firstDueDate + 'T12:00:00'); due.setMonth(due.getMonth() + i)
+      const dueDate = due.toISOString().slice(0, 10)
+      const amount = i === input.count - 1 ? Math.round((input.financedTotal - base * (input.count - 1)) * 100) / 100 : base
+      return { household_id: household.id, category_id: categoryId, type: 'expense', concept: input.concept + ' (' + (i + 1) + '/' + input.count + ')', amount, movement_date: dueDate, person: input.person, comment: input.comment || null, recorded_by: userId, payment_method: 'credit', installment_plan_id: planId, installment_number: i + 1 }
+    })
+    const movementResult = await supabase.from('movements').insert(rows).select('id,movement_date,amount')
+    if (movementResult.error || !movementResult.data) {
+      await supabase.from('installment_plans').delete().eq('id', planId)
+      notify('No se pudieron generar los gastos: ' + (movementResult.error?.message ?? 'Error')); return
+    }
+    const installmentRows = movementResult.data.map((movement, i) => ({
+      household_id: household.id, plan_id: planId, movement_id: movement.id,
+      installment_number: i + 1, due_date: movement.movement_date, amount: Number(movement.amount), status: 'pending'
+    }))
+    const installmentResult = await supabase.from('installments').insert(installmentRows)
+    if (installmentResult.error) {
+      await supabase.from('movements').delete().eq('installment_plan_id', planId)
+      await supabase.from('installment_plans').delete().eq('id', planId)
+      notify('No se pudieron guardar las cuotas: ' + installmentResult.error.message); return
+    }
+    const newMovements: Movement[] = movementResult.data.map((m, i) => ({ id: m.id, date: m.movement_date, kind: 'expense', concept: rows[i].concept, category: input.category, person: input.person, amount: Number(m.amount), comment: input.comment || undefined, recordedBy: userId }))
+    setMovements(current => [...newMovements, ...current])
+    setPlans(current => [...current, { id: planId, concept: input.concept, person: input.person, purchase_total: input.purchaseTotal, financed_total: input.financedTotal, installment_count: input.count, first_due_date: input.firstDueDate, status: 'active' }])
+    const { data: savedInstallments } = await supabase.from('installments').select('id,plan_id,movement_id,installment_number,due_date,amount,status').eq('plan_id', planId).order('installment_number')
+    setInstallments(current => [...current, ...((savedInstallments ?? []) as Installment[])])
+    setInstallmentForm(false); notify('Compra en cuotas registrada')
+  }
+  async function toggleInstallment(item: Installment) {
+    if (!supabase) return
+    const next = item.status === 'paid' ? 'pending' : 'paid'
+    const { error } = await supabase.from('installments').update({ status: next, paid_at: next === 'paid' ? new Date().toISOString() : null }).eq('id', item.id).eq('household_id', household.id)
+    if (error) { notify('No se pudo actualizar: ' + error.message); return }
+    setInstallments(current => current.map(x => x.id === item.id ? { ...x, status: next } : x))
+    notify(next === 'paid' ? 'Cuota marcada como pagada' : 'Cuota marcada como pendiente')
   }
   async function removeMovement(id: string) {
     if (!supabase) return
@@ -186,6 +241,7 @@ function FinanceApp({ household, userId, onSignOut }: { household: Household; us
           <div className="toolbar"><div className="search-box"><Search size={17} /><input placeholder="Buscar concepto o categoría..." value={search} onChange={e => setSearch(e.target.value)} /></div><div className="filter-wrap"><ListFilter size={16} /><select value={filter} onChange={e => setFilter(e.target.value)}><option>Todos</option><option>Agus</option><option>Camila</option><option>Compartido</option></select></div><button className="subtle-button export-button" onClick={exportCsv}><Download size={16} /> Exportar</button></div>
           <div className="panel table-panel">{filtered.length ? <div className="table-scroll"><table><thead><tr><th>Movimiento</th><th>Persona</th><th>Fecha</th><th className="align-right">Importe</th><th></th></tr></thead><tbody>{filtered.map(m => <tr key={m.id}><td><div className="table-concept"><span className={m.kind === 'income' ? 'mini-kind income-kind' : 'mini-kind expense-kind'}>{m.kind === 'income' ? <ArrowDownLeft size={15} /> : <ArrowUpRight size={15} />}</span><div><strong>{m.concept}</strong><small>{m.category}{m.comment ? ' · ' + m.comment : ''}</small></div></div></td><td><PersonTag person={m.person} /></td><td className="date-cell">{dateLabel(m.date)}</td><td className={m.kind === 'income' ? 'align-right amount-income' : 'align-right amount-expense'}>{m.kind === 'income' ? '+' : '−'}{money(m.amount)}</td><td><div className="row-actions"><button className="icon-button small" title="Editar" onClick={() => { setEditing(m); setModal(true) }}><SlidersHorizontal size={15} /></button><button className="icon-button small danger-hover" title="Eliminar" onClick={() => removeMovement(m.id)}><Trash2 size={15} /></button></div></td></tr>)}</tbody></table></div> : <EmptyState text="No encontramos movimientos con esos filtros." />}</div>
         </>}
+        {page === 'installments' && <InstallmentsPage plans={plans} installments={installments} categories={categories} onCreate={() => setInstallmentForm(true)} onToggle={toggleInstallment} />}
         {page === 'categories' && <><div className="page-heading"><div><div className="eyebrow">ORGANIZACIÓN</div><h1>Categorías</h1><p>Organizá los movimientos a tu manera.</p></div><button className="primary-button" onClick={async () => { const name = window.prompt('Nombre de la categoría'); if (!supabase || !name?.trim() || categories.some(c => c.name.toLowerCase() === name.trim().toLowerCase())) return; const { data, error } = await supabase.from('categories').insert({ household_id: household.id, name: name.trim(), type: 'expense', is_default: false }).select('id,name,type').single(); if (error) notify('Error: ' + error.message); else { setCategories([...categories, { id: data.id, name: data.name, kind: data.type as Kind }]); notify('Categoría creada') } }}><Plus size={17} /> Nueva categoría</button></div>
           <div className="category-columns"><CategoryGroup title="Gastos" kind="expense" categories={categories} onDelete={async name => { const category = categories.find(c => c.name === name); if (!category || !supabase) return; const { error } = await supabase.from('categories').delete().eq('id', category.id).eq('household_id', household.id); if (error) notify('No se pudo eliminar: puede tener movimientos asociados.'); else { setCategories(categories.filter(c => c.id !== category.id)); notify('Categoría eliminada') } }} /><CategoryGroup title="Ingresos" kind="income" categories={categories} onDelete={name => setCategories(categories.filter(c => c.name !== name))} /></div>
         </>}
@@ -193,11 +249,54 @@ function FinanceApp({ household, userId, onSignOut }: { household: Household; us
       </div>
       <footer className="footer"><span>EnQuéGasto <span className="footer-dot">·</span> Hecho para organizar lo cotidiano.</span><span>Versión inicial 0.1</span></footer>
     </main>
+    {installmentForm && <InstallmentModal categories={categories} onClose={() => setInstallmentForm(false)} onSave={createInstallmentPlan} />}
     {modal && <MovementModal categories={categories} editing={editing} onClose={() => { setModal(false); setEditing(null) }} onSave={saveMovement} />}
     {toast && <div className="toast"><Check size={16} />{toast}</div>}
   </div>
 }
 
+function InstallmentsPage({ plans, installments, categories, onCreate, onToggle }: { plans: any[]; installments: Installment[]; categories: Category[]; onCreate: () => void; onToggle: (item: Installment) => void }) {
+  const pending = installments.filter(i => i.status === 'pending')
+  const paid = installments.filter(i => i.status === 'paid')
+  const debt = pending.reduce((sum, i) => sum + i.amount, 0)
+  const next = [...pending].sort((a, b) => a.due_date.localeCompare(b.due_date))
+  return <>
+    <div className="page-heading"><div><div className="eyebrow">COMPROMISOS FUTUROS</div><h1>Cuotas</h1><p>Compras financiadas, pagos y deuda pendiente.</p></div><button className="primary-button" onClick={onCreate}><Plus size={17}/> Nueva compra en cuotas</button></div>
+    <section className="stat-grid installment-stats">
+      <div className="stat-card"><div className="stat-top"><span>Deuda pendiente</span><CalendarDays size={17}/></div><strong>{money(debt)}</strong><small>Saldo de cuotas por pagar</small></div>
+      <div className="stat-card"><div className="stat-top"><span>Cuotas pendientes</span></div><strong>{pending.length}</strong><small>De todas las compras activas</small></div>
+      <div className="stat-card"><div className="stat-top"><span>Cuotas pagadas</span></div><strong>{paid.length}</strong><small>Marcadas como abonadas</small></div>
+    </section>
+    <div className="panel installment-panel"><div className="panel-heading"><div><h2>Próximos vencimientos</h2><p>Marcá cada cuota cuando la hayas pagado.</p></div></div>
+      {next.length ? <div className="installment-list">{next.map(i => { const plan = plans.find(p => p.id === i.plan_id); return <div className="installment-row" key={i.id}><div className="installment-date"><strong>{dateLabel(i.due_date)}</strong><small>Cuota {i.installment_number} de {plan?.installment_count ?? '—'}</small></div><div className="installment-main"><strong>{plan?.concept ?? 'Compra financiada'}</strong><small>{plan?.person ?? 'Compartido'}</small></div><strong className="installment-amount">{money(i.amount)}</strong><button className="subtle-button installment-paid" onClick={() => onToggle(i)}><Check size={15}/> Pagar</button></div> })}</div> : <EmptyState text="No tenés cuotas pendientes. Cuando registres una compra financiada, aparecerá acá." />}
+    </div>
+    {paid.length > 0 && <div className="panel installment-panel"><div className="panel-heading"><div><h2>Cuotas pagadas</h2><p>Historial de pagos registrados.</p></div></div><div className="installment-list">{paid.map(i => { const plan = plans.find(p => p.id === i.plan_id); return <div className="installment-row paid-row" key={i.id}><div className="installment-date"><strong>{dateLabel(i.due_date)}</strong><small>Cuota {i.installment_number} de {plan?.installment_count ?? '—'}</small></div><div className="installment-main"><strong>{plan?.concept ?? 'Compra financiada'}</strong><small>{plan?.person ?? 'Compartido'}</small></div><strong className="installment-amount">{money(i.amount)}</strong><button className="text-button" onClick={() => onToggle(i)}>Deshacer</button></div> })}</div></div>}
+    {plans.length > 0 && <div className="panel installment-panel"><div className="panel-heading"><div><h2>Compras financiadas</h2><p>Resumen de cada plan de cuotas.</p></div></div><div className="plan-grid">{plans.map(p => { const items = installments.filter(i => i.plan_id === p.id); const remaining = items.filter(i => i.status === 'pending').reduce((sum, i) => sum + i.amount, 0); return <div className="plan-card" key={p.id}><strong>{p.concept}</strong><small>{p.person} · {p.installment_count} cuotas</small><div className="plan-numbers"><span>Compra: {money(Number(p.purchase_total))}</span><span>Financiado: {money(Number(p.financed_total))}</span></div><div className="plan-progress"><div style={{width: (items.length ? (items.filter(i=>i.status==='paid').length/items.length)*100 : 0)+'%'}}/></div><small>Restante: <b>{money(remaining)}</b></small></div> })}</div></div>}
+  </>
+}
+function InstallmentModal({ categories, onClose, onSave }: { categories: Category[]; onClose: () => void; onSave: (input: { concept: string; category: string; person: Person; purchaseTotal: number; financedTotal: number; count: number; firstDueDate: string; comment: string }) => void }) {
+  const [concept,setConcept]=useState('')
+  const [category,setCategory]=useState(categories.find(c=>c.kind==='expense')?.name ?? '')
+  const [person,setPerson]=useState<Person>('Compartido')
+  const [purchaseTotal,setPurchaseTotal]=useState('')
+  const [financedTotal,setFinancedTotal]=useState('')
+  const [count,setCount]=useState('3')
+  const [firstDueDate,setFirstDueDate]=useState(today)
+  const [comment,setComment]=useState('')
+  const total=Number(financedTotal || purchaseTotal)
+  const installmentsCount=Math.max(2,Number(count)||2)
+  const estimated=total/installmentsCount
+  return <div className="modal-backdrop"><form className="modal installment-modal" onSubmit={e=>{e.preventDefault();const purchase=Number(purchaseTotal);const financed=Number(financedTotal || purchaseTotal);const n=Number(count);if(concept.trim()&&category&&purchase>0&&financed>0&&n>=2&&n<=120)onSave({concept:concept.trim(),category,person,purchaseTotal:purchase,financedTotal:financed,count:n,firstDueDate,comment:comment.trim()})}}>
+    <div className="modal-header"><div><div className="eyebrow">NUEVA COMPRA FINANCIADA</div><h2>Registrar cuotas</h2></div><button type="button" className="icon-button" onClick={onClose}><X size={19}/></button></div>
+    <label className="field-label">¿Qué compraste?<input autoFocus required value={concept} onChange={e=>setConcept(e.target.value)} placeholder="Ej. Heladera, celular..."/></label>
+    <div className="field-grid"><label className="field-label">Precio de compra<input type="number" min="0.01" step="0.01" required value={purchaseTotal} onChange={e=>{setPurchaseTotal(e.target.value);if(!financedTotal)setFinancedTotal(e.target.value)}} placeholder="0"/></label><label className="field-label">Total financiado<input type="number" min="0.01" step="0.01" required value={financedTotal} onChange={e=>setFinancedTotal(e.target.value)} placeholder="Igual al precio si no hay interés"/></label></div>
+    <div className="field-grid"><label className="field-label">Cantidad de cuotas<input type="number" min="2" max="120" required value={count} onChange={e=>setCount(e.target.value)}/></label><label className="field-label">Primera cuota<input type="date" required value={firstDueDate} onChange={e=>setFirstDueDate(e.target.value)}/></label></div>
+    <div className="field-grid"><label className="field-label">Categoría<select value={category} onChange={e=>setCategory(e.target.value)}>{categories.filter(c=>c.kind==='expense').map(c=><option key={c.id} value={c.name}>{c.name}</option>)}</select></label><label className="field-label">¿De quién es?<select value={person} onChange={e=>setPerson(e.target.value as Person)}><option>Compartido</option><option>Agus</option><option>Camila</option></select></label></div>
+    <label className="field-label">Comentario <span className="optional">(opcional)</span><input value={comment} onChange={e=>setComment(e.target.value)} placeholder="Ej. 6 cuotas sin interés"/></label>
+    <div className="installment-preview"><span>{installmentsCount} cuotas estimadas</span><strong>{money(estimated)} por mes</strong><small>Financiado: {money(total)} · {total>Number(purchaseTotal)?'Incluye intereses':'Sin intereses adicionales'}</small></div>
+    <div className="modal-footer"><button type="button" className="secondary-button" onClick={onClose}>Cancelar</button><button className="primary-button" type="submit"><Check size={16}/> Crear cuotas</button></div>
+  </form></div>
+}
 function MovementRow({ movement: m, onEdit }: { movement: Movement; onEdit: () => void }) {
   return <button className="movement-row" onClick={onEdit}><span className={m.kind === 'income' ? 'movement-icon income-kind' : 'movement-icon expense-kind'}>{m.kind === 'income' ? <ArrowDownLeft size={17} /> : <ArrowUpRight size={17} />}</span><span className="movement-main"><strong>{m.concept}</strong><small>{m.category} <span>·</span> {m.person}</small></span><span className={m.kind === 'income' ? 'movement-amount amount-income' : 'movement-amount amount-expense'}>{m.kind === 'income' ? '+' : '−'}{money(m.amount)}</span></button>
 }
