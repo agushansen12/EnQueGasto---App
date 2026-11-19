@@ -197,3 +197,9 @@
 }
 :root[data-theme="dark"] .assistant-shortcut{background:#26352b;border-color:#405346;color:#d8e5db}
 :root[data-theme="dark"] .assistant-shortcut:hover{border-color:#8bb99a;color:#a5d3b2}
+
+
+/* Acción secundaria compacta para corregir la categoría desde el asistente. */
+.assistant-learning .assistant-correct-trigger{display:inline-flex;align-items:center;width:auto;min-height:0;margin-top:8px;padding:3px 0;border:0;border-radius:0;background:transparent;color:var(--muted);font:600 10px Manrope,sans-serif;cursor:pointer;box-shadow:none}
+.assistant-learning .assistant-correct-trigger:hover:not(:disabled){background:transparent;border:0;color:var(--green);text-decoration:underline}
+.assistant-learning .assistant-correct-trigger:disabled{opacity:.5;cursor:not-allowed}
