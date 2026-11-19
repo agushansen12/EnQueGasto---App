@@ -10,7 +10,7 @@ type Kind = 'expense' | 'income'
 type Person = 'Agus' | 'Camila' | 'Compartido'
 type Movement = { id: string; date: string; kind: Kind; concept: string; category: string; person: Person; amount: number; comment?: string; recordedBy: string }
 type Category = { id: string; name: string; kind: Kind }
-type AssistantKnowledge = { phrase: string; normalized_phrase: string; movement_type: Kind; category_name: string; canonical_concept: string; match_type: 'phrase' | 'merchant'; priority: number }
+type AssistantKnowledge = { household_id?: string | null; phrase: string; normalized_phrase: string; movement_type: Kind; category_name: string; canonical_concept: string; match_type: 'phrase' | 'merchant'; priority: number }
 type Installment = { id: string; plan_id: string; movement_id: string; installment_number: number; due_date: string; amount: number; status: 'pending' | 'paid'; plan?: { concept: string; person: Person; installment_count: number } }
 
 const today = new Date().toISOString().slice(0, 10)
@@ -63,7 +63,7 @@ function FinanceApp({ household, userId, onSignOut }: { household: Household; us
         supabase.from('movements').select('id,category_id,type,concept,amount,movement_date,person,comment,recorded_by').eq('household_id', household.id).order('movement_date', { ascending: false }),
         supabase.from('installment_plans').select('id,concept,person,purchase_total,financed_total,installment_count,first_due_date,status').eq('household_id', household.id).order('first_due_date', { ascending: true }),
         supabase.from('installments').select('id,plan_id,movement_id,installment_number,due_date,amount,status').eq('household_id', household.id).order('due_date', { ascending: true }),
-        supabase.from('assistant_knowledge').select('phrase,normalized_phrase,movement_type,category_name,canonical_concept,match_type,priority').eq('is_active', true).order('priority', { ascending: false })
+        supabase.from('assistant_knowledge').select('household_id,phrase,normalized_phrase,movement_type,category_name,canonical_concept,match_type,priority').eq('is_active', true).order('priority', { ascending: false })
       ])
       if (!active) return
       if (categoryResult.error || movementResult.error || planResult.error || installmentResult.error) {
@@ -145,10 +145,10 @@ function FinanceApp({ household, userId, onSignOut }: { household: Household; us
     setMovements(current => editing ? current.map(x => x.id === m.id ? m : x) : [{ ...m, recordedBy: userId }, ...current])
     setModal(false); setEditing(null); notify(editing ? 'Movimiento actualizado' : 'Movimiento agregado')
   }
-  async function saveAssistantMovement(draft: { date: string; kind: Kind; concept: string; category: string; person: Person; amount: number; comment?: string }): Promise<boolean> {
+  async function saveAssistantMovement(draft: { date: string; kind: Kind; concept: string; category: string; person: Person; amount: number; comment?: string }): Promise<string | null> {
     if (!supabase) return false
     const categoryId = categories.find(c => c.name === draft.category && c.kind === draft.kind)?.id
-    if (!categoryId) { notify('No encontré una categoría válida para ese movimiento.'); return false }
+    if (!categoryId) { notify('No encontré una categoría válida para ese movimiento.'); return null }
     const payload = {
       household_id: household.id,
       category_id: categoryId,
@@ -161,7 +161,7 @@ function FinanceApp({ household, userId, onSignOut }: { household: Household; us
       recorded_by: userId
     }
     const { data, error } = await supabase.from('movements').insert(payload).select('id').single()
-    if (error || !data) { notify('No se pudo registrar: ' + (error?.message ?? 'Error desconocido')); return false }
+    if (error || !data) { notify('No se pudo registrar: ' + (error?.message ?? 'Error desconocido')); return null }
     setMovements(current => [{ id: data.id, date: draft.date, kind: draft.kind, concept: draft.concept, category: draft.category, person: draft.person, amount: draft.amount, comment: draft.comment, recordedBy: userId }, ...current])
     notify('Movimiento registrado por el asistente')
     return true
@@ -315,7 +315,7 @@ function FinanceApp({ household, userId, onSignOut }: { household: Household; us
           <div className="toolbar"><div className="search-box"><Search size={17} /><input placeholder="Buscar concepto o categoría..." value={search} onChange={e => setSearch(e.target.value)} /></div><div className="filter-wrap"><ListFilter size={16} /><select value={filter} onChange={e => setFilter(e.target.value)}><option>Todos</option><option>Agus</option><option>Camila</option><option>Compartido</option></select></div><button className="subtle-button export-button" onClick={exportCsv}><Download size={16} /> Exportar</button></div>
           <div className="panel table-panel">{filtered.length ? <div className="table-scroll"><table><thead><tr><th>Movimiento</th><th>Persona</th><th>Fecha</th><th className="align-right">Importe</th><th></th></tr></thead><tbody>{filtered.map(m => <tr key={m.id}><td><div className="table-concept"><span className={m.kind === 'income' ? 'mini-kind income-kind' : 'mini-kind expense-kind'}>{m.kind === 'income' ? <ArrowDownLeft size={15} /> : <ArrowUpRight size={15} />}</span><div><strong>{m.concept}</strong><small>{m.category}{m.comment ? ' · ' + m.comment : ''}</small></div></div></td><td><PersonTag person={m.person} /></td><td className="date-cell">{dateLabel(m.date)}</td><td className={m.kind === 'income' ? 'align-right amount-income' : 'align-right amount-expense'}>{m.kind === 'income' ? '+' : '−'}{money(m.amount)}</td><td><div className="row-actions"><button className="icon-button small" title="Editar" onClick={() => { setEditing(m); setModal(true) }}><SlidersHorizontal size={15} /></button><button className="icon-button small danger-hover" title="Eliminar" onClick={() => setDeleteTarget(m)}><Trash2 size={15} /></button></div></td></tr>)}</tbody></table></div> : <EmptyState text="No encontramos movimientos con esos filtros." />}</div>
         </>}
-        {page === 'assistant' && <AssistantPanel categories={categories} knowledge={assistantKnowledge} onSave={saveAssistantMovement} />}
+        {page === 'assistant' && <AssistantPanel categories={categories} knowledge={assistantKnowledge} onSave={saveAssistantMovement} onCorrect={correctAssistantMovement} />}
         {page === 'installments' && <InstallmentsPage plans={plans} installments={installments} onCreate={() => setInstallmentForm(true)} onToggle={toggleInstallment} />}
         {page === 'categories' && <><div className="page-heading"><div><div className="eyebrow">ORGANIZACIÓN</div><h1>Categorías</h1><p>Organizá los movimientos a tu manera.</p></div><button className="primary-button" onClick={async () => { const name = window.prompt('Nombre de la categoría'); if (!supabase || !name?.trim() || categories.some(c => c.name.toLowerCase() === name.trim().toLowerCase())) return; const { data, error } = await supabase.from('categories').insert({ household_id: household.id, name: name.trim(), type: 'expense', is_default: false }).select('id,name,type').single(); if (error) notify('Error: ' + error.message); else { setCategories([...categories, { id: data.id, name: data.name, kind: data.type as Kind }]); notify('Categoría creada') } }}><Plus size={17} /> Nueva categoría</button></div>
           <div className="category-columns"><CategoryGroup title="Gastos" kind="expense" categories={categories} onDelete={async name => { const category = categories.find(c => c.name === name); if (!category || !supabase) return; const { error } = await supabase.from('categories').delete().eq('id', category.id).eq('household_id', household.id); if (error) notify('No se pudo eliminar: puede tener movimientos asociados.'); else { setCategories(categories.filter(c => c.id !== category.id)); notify('Categoría eliminada') } }} /><CategoryGroup title="Ingresos" kind="income" categories={categories} onDelete={name => setCategories(categories.filter(c => c.name !== name))} /></div>
