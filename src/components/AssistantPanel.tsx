@@ -5,6 +5,7 @@ import { Bot, CheckCircle2, CornerDownLeft, LoaderCircle, MessageCircle, Sparkle
 type Kind = 'expense' | 'income'
 type Person = 'Agus' | 'Camila' | 'Compartido'
 type Category = { id: string; name: string; kind: Kind }
+type KnowledgeEntry = { phrase: string; normalized_phrase: string; movement_type: Kind; category_name: string; canonical_concept: string; match_type: 'phrase' | 'merchant'; priority: number }
 type Draft = { date: string; kind: Kind; concept: string; category: string; person: Person; amount: number; comment?: string }
 type PendingDraft = Omit<Draft, 'category'>
 type CategoryChoice = { label: string; category: string }
@@ -56,7 +57,7 @@ function parseAmount(text: string): number | null {
   return Number.isFinite(value) && value > 0 ? value : null
 }
 
-function parseMovement(text: string, categories: Category[], identity: Person): ParseResult {
+function parseMovement(text: string, categories: Category[], knowledge: KnowledgeEntry[], identity: Person): ParseResult {
   const clean = normalize(text)
   const amount = parseAmount(text)
   if (!amount) return { status: 'unknown' }
@@ -106,6 +107,24 @@ function parseMovement(text: string, categories: Category[], identity: Person): 
     }
   }
 
+  // Primero consultamos el catálogo compartido de Supabase. Las expresiones
+  // más específicas tienen prioridad sobre las más generales.
+  const knowledgeMatch = [...knowledge]
+    .filter(entry => entry.movement_type === kind && available(entry.category_name) && hasTerm(clean, entry.normalized_phrase))
+    .sort((a, b) => b.normalized_phrase.length - a.normalized_phrase.length || b.priority - a.priority)[0]
+
+  if (knowledgeMatch) {
+    let person: Person = ['Alquiler', 'Expensas', 'Servicios'].includes(knowledgeMatch.category_name) ? 'Compartido' : identity
+    if (clean.includes('compartido') || clean.includes('entre los dos') || clean.includes('de los dos')) person = 'Compartido'
+    else if (clean.includes('camila')) person = 'Camila'
+    else if (clean.includes('agus')) person = 'Agus'
+    const concept = knowledgeMatch.canonical_concept || knowledgeMatch.phrase
+    return {
+      status: 'ready',
+      draft: { date: today(), kind, concept, category: knowledgeMatch.category_name, person, amount }
+    }
+  }
+
   const match = rules.find(rule => rule.words.some(word => hasTerm(clean, word)) && available(rule.category))
   if (!match) return { status: 'unknown' }
 
@@ -122,7 +141,7 @@ function parseMovement(text: string, categories: Category[], identity: Person): 
   return { status: 'ready', draft: { date: today(), kind, concept: displayConcept, category: match.category, person, amount } }
 }
 
-export default function AssistantPanel({ categories, onSave }: { categories: Category[]; onSave: (draft: Draft) => Promise<boolean> }) {
+export default function AssistantPanel({ categories, knowledge, onSave }: { categories: Category[]; knowledge: KnowledgeEntry[]; onSave: (draft: Draft) => Promise<boolean> }) {
   const [identity, setIdentity] = useState<Person>(() => (localStorage.getItem('enquegasto-assistant-person') as Person | null) ?? 'Agus')
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
@@ -164,7 +183,7 @@ export default function AssistantPanel({ categories, onSave }: { categories: Cat
     if (!text || busy) return
     setInput('')
     setMessages(current => [...current, { role: 'user', text }])
-    const result = parseMovement(text, categories, identity)
+    const result = parseMovement(text, categories, knowledge, identity)
     if (result.status === 'unknown') {
       setMessages(current => [...current, { role: 'assistant', text: 'No pude identificar con suficiente seguridad el importe o el concepto. No hace falta que escribas “gasté” o “cobré”: podés poner “mueble 20 mil”, “recarga SUBE 10 mil” o “sueldo 1 millón”. Si la frase puede ser un gasto o un ingreso, te voy a pedir que lo aclares antes de registrarlo.' }])
       return
@@ -185,7 +204,7 @@ export default function AssistantPanel({ categories, onSave }: { categories: Cat
     <div className="page-heading"><div><div className="eyebrow">ASISTENTE DE CARGA</div><h1>Asistente</h1><p>Registrá gastos e ingresos escribiendo como hablás.</p></div><div className="assistant-status"><span /> Sin servicios pagos</div></div>
     <div className="assistant-layout">
       <div className="panel assistant-chat">
-        <div className="assistant-chat-heading"><div className="assistant-avatar"><Bot size={20}/></div><div><strong>Asistente de EnQuéGasto</strong><small><span/> Disponible · interpretación local</small></div><Sparkles size={18} className="assistant-sparkle"/></div>
+        <div className="assistant-chat-heading"><div className="assistant-avatar"><Bot size={20}/></div><div><strong>Asistente de EnQuéGasto</strong><small><span/> Disponible · {knowledge.length} conceptos en su catálogo</small></div><Sparkles size={18} className="assistant-sparkle"/></div>
         <div className="assistant-messages">
           {messages.map((message, index) => <div className={'assistant-message ' + message.role} key={index}>
             <div className="assistant-message-icon">{message.role === 'assistant' ? <Bot size={15}/> : <UserRound size={15}/>}</div>
@@ -200,7 +219,7 @@ export default function AssistantPanel({ categories, onSave }: { categories: Cat
           <input value={input} onChange={event => setInput(event.target.value)} placeholder="Ej. gasté 8.500 en una farmacia..." aria-label="Describí un gasto o ingreso"/>
           <button type="submit" disabled={!input.trim() || busy} aria-label="Enviar mensaje"><CornerDownLeft size={18}/></button>
         </form>
-        <div className="assistant-footnote"><MessageCircle size={13}/> Los mensajes se procesan en tu navegador. No usamos una API de IA paga.</div>
+        <div className="assistant-footnote"><MessageCircle size={13}/> El asistente consulta el catálogo compartido de Supabase y aplica reglas locales, sin una API de IA paga.</div>
       </div>
       <aside className="panel assistant-settings">
         <div className="assistant-settings-icon"><UserRound size={19}/></div>
